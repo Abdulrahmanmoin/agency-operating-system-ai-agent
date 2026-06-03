@@ -83,43 +83,18 @@ async def test_unmappable_request_asks_to_rephrase(monkeypatch):
     assert "rephrase" in out["last_assistant_message"]
 
 
-async def test_clarification_pauses_for_missing_audience(monkeypatch):
-    from agencyos.graph.state import Requirements
-
-    _patch_intent(monkeypatch, Intent(agents=["clarification"]))
-    app = _compile()
-    state = AgencyState(
-        user_id="u",
-        transcript="b",
-        requirements=Requirements(client_goals=["x"]),  # present, but no target_audience
-        last_user_message="check for gaps",
-    )
-    out = await app.ainvoke(state, _cfg("t-clar"))
-    assert "__interrupt__" in out
-    assert out["__interrupt__"][0].value["kind"] == "clarification"
-    assert out["__interrupt__"][0].value["field"] == "target_audience"
-
-    final = await app.ainvoke(Command(resume="enterprise buyers"), _cfg("t-clar"))
-    assert final["requirements"].target_audience == "enterprise buyers"
-    assert final["clarifications"][0].user_answer == "enterprise buyers"
-
-
 async def test_full_pipeline_runs_everything(monkeypatch):
     _patch_intent(monkeypatch, Intent(full_pipeline=True))
     app = _compile()
     state = AgencyState(user_id="u", transcript="brief", last_user_message="handle it end to end")
+    # With clarification detecting no gaps (conftest stub), the pipeline runs straight through.
     out = await app.ainvoke(state, _cfg("t-full"))
-    # pipeline pauses mid-way at the clarification HITL (missing target audience)
-    assert "__interrupt__" in out
-    assert out["__interrupt__"][0].value["kind"] == "clarification"
-
-    final = await app.ainvoke(Command(resume="small businesses"), _cfg("t-full"))
-    assert final["proposal"] is not None
-    assert final["validation_report"] is not None
-    assert final["run_summary"] is not None
-    assert final["requirements"].target_audience == "small businesses"
+    assert "__interrupt__" not in out
+    assert out["proposal"] is not None
+    assert out["validation_report"] is not None
+    assert out["run_summary"] is not None
     # transcription is skipped (no audio); the rest of the pipeline ran in order
-    assert final["scratch"]["executed"] == [
+    assert out["scratch"]["executed"] == [
         "requirement",
         "clarification",
         "planning",

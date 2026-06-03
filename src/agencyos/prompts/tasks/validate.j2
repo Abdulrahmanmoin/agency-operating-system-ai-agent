@@ -1,0 +1,38 @@
+Review the full project package below for quality before it goes to the client.
+
+Score each dimension 0-10 and decide whether to approve:
+- consistency: do requirements, plan, tasks, and proposal agree with each other (no contradictions,
+  no duplicated or orphaned tasks, dependencies make sense)?
+- completeness: is every requirement and service covered by the plan, tasks, and proposal? Are any
+  deliverables missing?
+- clarity: is the proposal clear, well-structured, and client-ready?
+
+APPROVAL POLICY — approve a solid, client-ready DRAFT, not a perfect document:
+- Set approved=true when the package is coherent and client-ready overall (the kind of first
+  draft a competent senior account manager would send), i.e. all three scores are >= 7 and there
+  is no MATERIAL defect.
+- Reject (approved=false) ONLY for a material defect:
+  - a service the client explicitly requested is entirely missing from the plan/tasks/proposal,
+  - a clear internal contradiction (e.g. a task references a milestone that doesn't exist),
+  - empty, placeholder, or nonsensical content,
+  - a genuinely critical requirement is absent and was not already clarified.
+- Do NOT reject merely because you would like more detail, more specific dates, tighter budget
+  breakdowns, or extra polish — those are acceptable in a proposal draft and are not defects.
+
+When rejecting, set target_agent to the SINGLE agent whose output most needs the fix and put the
+specific, actionable issue in feedback so that agent can address it.
+
+Requirements (JSON):
+{{ requirements_json }}
+
+Plan (JSON):
+{{ plan_json }}
+
+Tasks (JSON):
+{{ tasks_json }}
+
+Risks (JSON):
+{{ risks_json }}
+
+Proposal (JSON):
+{{ proposal_json }}

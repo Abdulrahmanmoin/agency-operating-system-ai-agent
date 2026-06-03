@@ -99,12 +99,21 @@ def _seed_state(
     audio_path: str | None,
     notes_path: str | None,
 ) -> AgencyState:
+    # Load notes text up front so agents have working material from turn one. Audio is
+    # transcribed later by the transcription agent.
+    notes_text: str | None = None
+    if notes_path:
+        from agencyos.tools.document_loader import load_document
+
+        notes_text = load_document(notes_path)
+
     return AgencyState(
         conversation_id=UUID(str(conversation_id)),
         user_id=user_id,
         client_id=client_id,
         audio_path=Path(audio_path) if audio_path else None,
         notes_path=Path(notes_path) if notes_path else None,
+        notes_text=notes_text,
     )
 
 

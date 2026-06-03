@@ -1,0 +1,20 @@
+Analyze the client requirements below for gaps, ambiguities, and contradictions.
+
+Return a list of items. For each item provide:
+- field: the requirement field it concerns (e.g. "target_audience", "budget", "deadline",
+  "services", "constraints") or "general"
+- issue: what is missing, ambiguous, or contradictory
+- severity: one of "critical", "major", "minor"
+- question: a clear question to ask the client to resolve it
+
+Severity guidance:
+- critical: information essential to plan the project at all (e.g. target audience, budget,
+  hard deadline, core scope). Planning should not proceed without it.
+- major: important, but the team could proceed with a reasonable, stated assumption.
+- minor: a nice-to-have clarification.
+
+Only report genuine gaps grounded in the requirements — do not invent issues. If the requirements
+are complete and unambiguous, return an empty list.
+
+Requirements (JSON):
+{{ requirements_json }}

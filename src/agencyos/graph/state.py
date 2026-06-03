@@ -6,7 +6,23 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+class _Payload(BaseModel):
+    """Base for LLM-produced payloads.
+
+    Groq's function-calling validation rejects `null` for non-nullable array fields, and models
+    sometimes emit `null` for "no items". So list fields here are typed `... | None` (schema
+    accepts null) and coerced back to `[]` after validation, keeping downstream code list-safe.
+    """
+
+    @model_validator(mode="after")
+    def _coerce_none_lists(self):
+        for name, field in type(self).model_fields.items():
+            if getattr(self, name) is None and "list[" in str(field.annotation):
+                setattr(self, name, [])
+        return self
 
 
 # ─── Inter-agent payloads ─────────────────────────────────────────────
@@ -18,13 +34,13 @@ class TranscriptMeta(BaseModel):
     language: str
 
 
-class Requirements(BaseModel):
-    client_goals: list[str] = Field(default_factory=list)
-    services: list[str] = Field(default_factory=list)
+class Requirements(_Payload):
+    client_goals: list[str] | None = None
+    services: list[str] | None = None
     deadline: str | None = None
     budget: str | None = None
-    constraints: list[str] = Field(default_factory=list)
-    priorities: list[str] = Field(default_factory=list)
+    constraints: list[str] | None = None
+    priorities: list[str] | None = None
     target_audience: str | None = None
 
 
@@ -41,25 +57,31 @@ class Clarification(BaseModel):
     user_answer: str | None = None
 
 
-class Milestone(BaseModel):
+class Milestone(_Payload):
     name: str
     description: str
     target_date: str | None = None
-    deliverables: list[str] = Field(default_factory=list)
+    deliverables: list[str] | None = None
 
 
-class Plan(BaseModel):
+class Plan(_Payload):
     summary: str
-    phases: list[Milestone] = Field(default_factory=list)
+    phases: list[Milestone] | None = None
 
 
-class Task(BaseModel):
+class Task(_Payload):
     id: str
     title: str
     description: str
     priority: int  # 1 = highest
-    depends_on: list[str] = Field(default_factory=list)
+    depends_on: list[str] | None = None
     milestone: str
+
+
+class TaskList(_Payload):
+    """Wrapper so the LLM can return a list of tasks via structured output."""
+
+    tasks: list[Task] | None = None
 
 
 class RiskSeverity(str, Enum):
@@ -73,6 +95,12 @@ class Risk(BaseModel):
     description: str
     severity: RiskSeverity
     mitigation: str
+
+
+class RiskList(_Payload):
+    """Wrapper so the LLM can return a list of risks via structured output."""
+
+    risks: list[Risk] | None = None
 
 
 class Proposal(BaseModel):
@@ -117,11 +145,11 @@ class RunSummary(BaseModel):
     incidents: list[str] = Field(default_factory=list)
 
 
-class Intent(BaseModel):
+class Intent(_Payload):
     """Result of the Manager classifying a free-text user message into target agents."""
 
-    agents: list[str] = Field(
-        default_factory=list,
+    agents: list[str] | None = Field(
+        default=None,
         description="Agent names the user's request maps to (subset of the known agent roster).",
     )
     full_pipeline: bool = Field(
@@ -154,6 +182,7 @@ class AgencyState(BaseModel):
     # Inputs
     audio_path: Path | None = None
     notes_path: Path | None = None
+    notes_text: str | None = None  # text loaded from notes_path (txt/docx/pdf)
     raw_user_message: str | None = None
 
     # Agent outputs
@@ -184,3 +213,7 @@ class AgencyState(BaseModel):
 
     # Free-form scratch for tools that don't fit a typed slot
     scratch: dict[str, Any] = Field(default_factory=dict)
+
+    def source_material(self) -> str | None:
+        """The working text agents extract from: an audio transcript or loaded notes."""
+        return self.transcript or self.notes_text

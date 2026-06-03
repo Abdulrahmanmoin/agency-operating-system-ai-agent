@@ -121,12 +121,22 @@ def dispatch_router(state: AgencyState) -> str:
 
 
 def make_agent_node(agent_name: str):
-    """Wrap a BaseAgent as a graph node that runs it and pops it from the dispatch queue."""
+    """Wrap a BaseAgent as a graph node that runs it and advances the dispatch queue.
+
+    Normally the just-run agent sits at the head of the queue and is dropped. An agent's merge
+    may instead rewrite the queue wholesale (e.g. the validator bouncing work back) and set
+    `scratch['_queue_overridden']` — in that case we leave the queue exactly as it set it.
+    """
     agent = AGENTS[agent_name]
 
     async def node(state: AgencyState) -> AgencyState:
         new_state = await agent(state)  # may interrupt() (e.g. clarification HITL)
-        new_state.dispatch_queue = [a for a in new_state.dispatch_queue if a != agent_name]
+        if new_state.scratch.pop("_queue_overridden", False):
+            pass  # the agent's merge already set the next queue explicitly
+        elif new_state.dispatch_queue and new_state.dispatch_queue[0] == agent_name:
+            new_state.dispatch_queue = new_state.dispatch_queue[1:]
+        else:
+            new_state.dispatch_queue = [a for a in new_state.dispatch_queue if a != agent_name]
         new_state.scratch.setdefault("executed", []).append(agent_name)
         return new_state
 

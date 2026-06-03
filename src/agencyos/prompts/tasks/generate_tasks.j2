@@ -1,0 +1,18 @@
+Decompose the project plan below into a flat list of actionable, Jira-style tasks.
+
+For each task provide:
+- id: a short stable identifier, e.g. "T1", "T2", "T3" (unique across the whole list)
+- title: a concise action ("Set up Stripe subscription billing")
+- description: 1-2 sentences on what the task involves
+- priority: integer where 1 = highest priority
+- depends_on: list of task ids that must finish first (empty if none)
+- milestone: the exact name of the plan milestone this task belongs to
+
+Rules:
+- Cover every milestone and its deliverables with at least one task.
+- Dependencies must reference ids that exist in this list and must NOT form a cycle.
+- Order tasks roughly by execution sequence; earlier milestones' tasks come first.
+- Keep it realistic: a handful of tasks per milestone, not an exhaustive checklist.
+
+Project plan (JSON):
+{{ plan_json }}

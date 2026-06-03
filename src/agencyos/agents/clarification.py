@@ -1,15 +1,35 @@
-"""ClarificationAgent — detect critical gaps and pause the graph for human input (HITL)."""
+"""ClarificationAgent — LLM-driven gap/contradiction detection with HITL resolution.
+
+Detects gaps in the requirements via the LLM. If any are *critical*, it pauses the graph once
+(a single combined interrupt) to ask the user, then folds their answer back into the requirements
+with a second LLM call. A single interrupt keeps the node idempotent across the resume re-run.
+"""
+
+from typing import Literal
 
 from langgraph.types import interrupt
+from pydantic import BaseModel, Field
 
 from agencyos.agents.base import BaseAgent
-from agencyos.graph.state import AgencyState, Clarification, ClarificationSeverity
+from agencyos.graph.state import (
+    AgencyState,
+    Clarification,
+    ClarificationSeverity,
+    Requirements,
+    _Payload,
+)
+from agencyos.llm import ainvoke_structured, get_chat_model
 
-# Requirement fields treated as critical: if missing, we must ask the user before proceeding.
-# (Placeholder rule-based gap detection; real LLM-driven detection lands in a later phase.)
-_CRITICAL_FIELDS: list[tuple[str, str]] = [
-    ("target_audience", "Who is the target audience? It wasn't specified in the brief."),
-]
+
+class GapItem(BaseModel):
+    field: str = Field(description="Requirement field the gap concerns, or 'general'.")
+    issue: str = Field(description="What is missing, ambiguous, or contradictory.")
+    severity: Literal["critical", "major", "minor"]
+    question: str = Field(description="The question to ask the client to resolve this gap.")
+
+
+class GapAnalysis(_Payload):
+    items: list[GapItem] | None = None
 
 
 class ClarificationAgent(BaseAgent):
@@ -20,39 +40,80 @@ class ClarificationAgent(BaseAgent):
 
     async def reason(self, state: AgencyState) -> str:
         return (
-            "Inspecting requirements for missing critical fields; "
-            "will pause to ask the user (HITL) for anything essential that's absent."
+            "Analyzing the requirements for gaps, ambiguities, and contradictions; will pause to "
+            "ask the user about any CRITICAL gaps before planning proceeds."
         )
 
-    async def act(self, state: AgencyState, reasoning: str) -> list[Clarification]:
+    async def _detect(self, state: AgencyState) -> list[GapItem]:
+        from agencyos import prompts
+
         reqs = state.requirements
-        clarifications: list[Clarification] = []
+        system = (
+            f"You are the {self.role}. {self.responsibility} Goal: {self.goal} "
+            "Only report genuine gaps grounded in the requirements; never invent issues."
+        )
+        user = prompts.render("tasks/detect_gaps.j2", requirements_json=reqs.model_dump_json(indent=2))
+        model = get_chat_model("specialist", temperature=0.0).with_structured_output(GapAnalysis)
+        analysis: GapAnalysis = await ainvoke_structured(
+            model,
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        )
+        return analysis.items
+
+    async def _apply(self, reqs: Requirements, criticals: list[GapItem], answer: str) -> Requirements:
+        from agencyos import prompts
+
+        system = (
+            "You update a requirements object using the client's answers. Fill only the fields the "
+            "answer addresses; leave everything else exactly as-is. Never fabricate information."
+        )
+        user = prompts.render(
+            "tasks/apply_clarifications.j2",
+            requirements_json=reqs.model_dump_json(indent=2),
+            questions="\n".join(f"- {c.question}" for c in criticals),
+            answer=answer,
+        )
+        model = get_chat_model("specialist", temperature=0.0).with_structured_output(Requirements)
+        return await ainvoke_structured(
+            model,
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        )
+
+    async def act(self, state: AgencyState, reasoning: str) -> dict:
+        reqs = state.requirements
         if reqs is None:
-            return clarifications
+            return {"clarifications": [], "requirements": None}
 
-        for field_name, question in _CRITICAL_FIELDS:
-            if getattr(reqs, field_name, None):
-                continue
-            # Pause the graph and ask the user. On resume, `answer` holds their reply.
-            answer = interrupt({"kind": "clarification", "field": field_name, "question": question})
-            value = str(answer).strip() if answer is not None else ""
-            setattr(reqs, field_name, value)
-            clarifications.append(
-                Clarification(
-                    field=field_name,
-                    issue="missing",
-                    severity=ClarificationSeverity.CRITICAL,
-                    user_answer=value,
-                )
-            )
-        return clarifications
+        items = await self._detect(state)
+        clarifications = [
+            Clarification(field=i.field, issue=i.issue, severity=ClarificationSeverity(i.severity))
+            for i in items
+        ]
+        criticals = [i for i in items if i.severity == "critical"]
 
-    def merge(self, state: AgencyState, output: list[Clarification]) -> AgencyState:
-        # `output` already carries user answers (gathered via interrupt in act()).
-        state.clarifications = output
+        if not criticals:
+            return {"clarifications": clarifications, "requirements": reqs}
+
+        # Pause ONCE for all critical gaps, then fold the answer into the requirements.
+        combined = "I need a bit more information before I can plan this:\n" + "\n".join(
+            f"- {c.question}" for c in criticals
+        )
+        answer = interrupt(
+            {"kind": "clarification", "question": combined, "fields": [c.field for c in criticals]}
+        )
+        updated = await self._apply(reqs, criticals, str(answer))
+        for c in clarifications:
+            if c.severity == ClarificationSeverity.CRITICAL:
+                c.user_answer = str(answer)
+        return {"clarifications": clarifications, "requirements": updated}
+
+    def merge(self, state: AgencyState, output: dict) -> AgencyState:
+        state.clarifications = output["clarifications"]
+        if output["requirements"] is not None:
+            state.requirements = output["requirements"]
         state.paused_for_input = any(
             c.user_answer is None and c.severity == ClarificationSeverity.CRITICAL
-            for c in output
+            for c in state.clarifications
         )
         return state
 
