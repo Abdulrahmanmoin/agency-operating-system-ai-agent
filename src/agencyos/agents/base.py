@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+from langgraph.errors import GraphBubbleUp
+
 from agencyos.graph.state import AgencyState, AuditEntry, AuditPhase
 from agencyos.observability.logging import get_logger
 
@@ -26,6 +28,10 @@ class BaseAgent(ABC):
 
         try:
             output = await self.act(state, reasoning)
+        except GraphBubbleUp:
+            # LangGraph control-flow signals (e.g. interrupt() for HITL) must propagate
+            # untouched — they are not errors.
+            raise
         except Exception as exc:  # noqa: BLE001 — top-level agent boundary
             self.log.error("agent.act.failed", agent=self.name, error=str(exc))
             state.audit_log.append(

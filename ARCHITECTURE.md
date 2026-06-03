@@ -143,57 +143,52 @@ This object **is** the shared memory between agents during a single run.
 
 ---
 
-## 4. Graph topology (LangGraph)
+## 4. Graph topology (LangGraph) — intent-driven, not a fixed pipeline
+
+The system is **conversational**: one graph invocation = one user turn. There is no forced
+top-to-bottom march. The Manager classifies the user's free-text request into a set of target
+agents and only those agents run (in dependency order). Missing prerequisites trigger an
+**ask-first** interrupt; "do everything" is just one possible intent.
 
 ```
-            START
-              │
-              ▼
-       ┌──────────────┐
-       │   Manager    │◄────────────────────────┐
-       └──────┬───────┘                         │
-              │                                 │ Validator
-   ┌──────────┴──────────┐                      │  feedback
-   ▼                     ▼                      │
-┌──────────────┐   (skip if text)              │
-│Transcription │                                │
-└──────┬───────┘                                │
-       ▼                                         │
-┌──────────────┐                                │
-│ Requirement  │                                │
-└──────┬───────┘                                │
-       ▼                                         │
-┌──────────────┐  pause for user input         │
-│Clarification │──── interrupt ────► [CLI HITL]│
-└──────┬───────┘  ◄──── resume ─────           │
-       ▼                                         │
-┌──────────────┐                                │
-│   Planning   │                                │
-└──────┬───────┘                                │
-       ▼                                         │
-┌──────────────┐                                │
-│  Task Gen    │                                │
-└──────┬───────┘                                │
-       ▼                                         │
-┌──────────────┐                                │
-│     Risk     │                                │
-└──────┬───────┘                                │
-       ▼                                         │
-┌──────────────┐                                │
-│   Proposal   │                                │
-└──────┬───────┘                                │
-       ▼                                         │
-┌──────────────┐      reject (max 3)            │
-│  Validator   │────────────────────────────────┘
-└──────┬───────┘
-       │ approve
-       ▼
-┌──────────────┐
-│  Executor    │
-└──────┬───────┘
-       ▼
-      END
+                         START
+                           │
+                           ▼
+                   ┌───────────────┐   no task yet?  ┌──────────────────────┐
+                   │    intake     │────────────────►│ capabilities offer    │──► END
+                   └───────┬───────┘                 │ ("here's what I can…")│
+                           │ has instruction         └──────────────────────┘
+                           ▼
+                   ┌────────────────────┐
+                   │ intent_classifier  │  (LLM → Intent{agents, full_pipeline})
+                   └─────────┬──────────┘
+                             ▼
+                   ┌────────────────────┐  missing prereqs?  ┌───────────────────┐
+                   │ prerequisite_check │───── interrupt ───►│  ask user (HITL):  │
+                   │                    │◄──── resume ───────│ "run X, Y first?"  │
+                   └─────────┬──────────┘                    └───────────────────┘
+                             │ build dispatch_queue (only needed agents, topo-ordered)
+                             ▼
+        ┌───────────────── dispatch loop ──────────────────┐
+        │   next queued agent ──► run it ──► pop from queue │  (clarification may
+        │            ▲                          │           │   interrupt for HITL,
+        │            └──────────────────────────┘           │   then resume)
+        └──────────────────────┬───────────────────────────┘
+                               │ queue empty
+                               ▼
+                          ┌──────────┐
+                          │ finalize │ ──► END  (assistant summary; control back to user)
+                          └──────────┘
 ```
+
+Agents available to the dispatch loop: `transcription` (only if audio), `requirement`,
+`clarification`, `planning`, `task_generation`, `risk`, `proposal`, `validator`, `executor`.
+Their prerequisite edges live in `graph/routing.py::DEPENDENCIES`. The full end-to-end intent
+runs `routing.py::FULL_PIPELINE`.
+
+State persists across turns via the **Postgres checkpointer** (thread_id = conversation_id),
+so the same backend serves the CLI today and the planned Next.js UI later — interrupts are
+resumed with `Command(resume=…)` regardless of which front-end is driving.
 
 ---
 

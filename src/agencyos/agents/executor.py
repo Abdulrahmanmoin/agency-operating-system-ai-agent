@@ -16,8 +16,12 @@ class ExecutorAgent(BaseAgent):
         return f"Packaging artifacts for conversation {state.conversation_id} to outputs/."
 
     async def act(self, state: AgencyState, reasoning: str) -> dict:
-        # TODO: tools.file_io.write_proposal / write_tasks / zip_bundle
-        raise NotImplementedError("ExecutorAgent.act not yet implemented")
+        # PLACEHOLDER: real artifact writing + zip packaging lands later. We compute the
+        # output path without forcing disk I/O so routing stays test-friendly.
+        from agencyos.config import settings
+
+        output_path = str(settings.output_dir / str(state.conversation_id))
+        return {"output_path": output_path}
 
     def merge(self, state: AgencyState, output: dict) -> AgencyState:
         state.run_summary = RunSummary(

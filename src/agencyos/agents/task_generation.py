@@ -14,7 +14,16 @@ class TaskGenerationAgent(BaseAgent):
         return "Decomposing each milestone into ordered tasks with explicit dependencies."
 
     async def act(self, state: AgencyState, reasoning: str) -> list[Task]:
-        raise NotImplementedError("TaskGenerationAgent.act not yet implemented")
+        # PLACEHOLDER: real Jira-style decomposition lands later.
+        return [
+            Task(
+                id="T1",
+                title="(placeholder task)",
+                description="Derived from the plan.",
+                priority=1,
+                milestone="Phase 1",
+            )
+        ]
 
     def merge(self, state: AgencyState, output: list[Task]) -> AgencyState:
         state.tasks = output

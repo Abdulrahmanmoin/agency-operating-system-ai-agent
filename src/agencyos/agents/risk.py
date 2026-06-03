@@ -14,7 +14,17 @@ class RiskAnalysisAgent(BaseAgent):
         return "Scanning plan, tasks, and requirements for risks; may verify benchmarks via web search."
 
     async def act(self, state: AgencyState, reasoning: str) -> list[Risk]:
-        raise NotImplementedError("RiskAnalysisAgent.act not yet implemented")
+        # PLACEHOLDER: real risk detection (with web-search benchmarks) lands later.
+        from agencyos.graph.state import RiskSeverity
+
+        return [
+            Risk(
+                title="(placeholder) timeline risk",
+                description="Deadline may be optimistic.",
+                severity=RiskSeverity.MEDIUM,
+                mitigation="Re-baseline after Phase 1.",
+            )
+        ]
 
     def merge(self, state: AgencyState, output: list[Risk]) -> AgencyState:
         state.risks = output

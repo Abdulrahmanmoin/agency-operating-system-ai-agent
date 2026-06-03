@@ -1,78 +1,184 @@
-"""Build the LangGraph state graph wiring every agent node + routing."""
+"""Intent-driven conversational graph.
+
+One graph invocation = one user turn. The flow is:
+
+    START -> intake -> (capabilities offer? -> END)
+                    -> intent_classifier -> prerequisite_check
+                          -> (interrupt: confirm prerequisites)
+                          -> dispatch loop (run only the needed agents, in dependency order)
+                          -> finalize -> END
+
+Mid-turn pauses (prerequisite confirmation, and clarification HITL inside an agent) use
+LangGraph `interrupt()`; the caller resumes with `Command(resume=...)`. State persists across
+turns via the checkpointer the orchestrator supplies at compile time.
+"""
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import interrupt
 
-from agencyos.agents import (
-    clarification,
-    executor,
-    manager,
-    planning,
-    proposal,
-    requirement,
-    risk,
-    task_generation,
-    transcription,
-    validator,
+from agencyos.agents import manager
+from agencyos.agents.registry import AGENTS, capabilities_text
+from agencyos.graph.routing import (
+    FULL_PIPELINE,
+    _step_done,
+    topological_order,
 )
-from agencyos.graph.routing import manager_router, validator_router
-from agencyos.graph.state import AgencyState
+from agencyos.graph.state import AgencyState, AuditEntry, AuditPhase
+
+_YES = {"y", "yes", "yeah", "yep", "sure", "ok", "okay", "do it", "proceed", "go ahead", "please"}
 
 
-def build_graph():
+def _is_yes(answer: object) -> bool:
+    if isinstance(answer, bool):
+        return answer
+    text = str(answer or "").strip().lower()
+    return text in _YES or text.startswith("y")
+
+
+# ─── Manager-driven control nodes ─────────────────────────────────────
+
+
+def intake_node(state: AgencyState) -> AgencyState:
+    """First node of a turn. If there's no actionable instruction and we haven't yet shown the
+    capabilities menu, offer it."""
+    msg = (state.last_user_message or "").strip()
+    if not msg and not state.capabilities_offered:
+        if state.audio_path:
+            kind = "an audio recording"
+        elif state.notes_path:
+            kind = "your notes"
+        else:
+            kind = "some material"
+        state.last_assistant_message = capabilities_text(kind)
+        state.capabilities_offered = True
+    return state
+
+
+def intake_router(state: AgencyState) -> str:
+    return "classify" if (state.last_user_message or "").strip() else "end"
+
+
+async def intent_classifier_node(state: AgencyState) -> AgencyState:
+    """Classify the user's message into target agents (LLM)."""
+    intent = await manager.run.classify_intent(state)
+    state.intent = intent
+    state.scratch["executed"] = []  # reset per-turn execution log
+    state.last_assistant_message = None
+    state.audit_log.append(
+        AuditEntry(
+            agent="manager",
+            phase=AuditPhase.ROUTE,
+            content=f"intent: agents={intent.agents} full_pipeline={intent.full_pipeline} :: {intent.rationale}",
+        )
+    )
+    return state
+
+
+def prerequisite_check_node(state: AgencyState) -> AgencyState:
+    """Decide the dispatch queue. May interrupt to ask the user about missing prerequisites."""
+    intent = state.intent
+    assert intent is not None
+
+    if intent.full_pipeline:
+        queue = topological_order(FULL_PIPELINE)
+    elif not intent.agents:
+        state.last_assistant_message = (
+            "I'm not sure which of my capabilities that maps to. "
+            "Could you rephrase, or ask for one of the things I listed?"
+        )
+        state.dispatch_queue = []
+        return state
+    else:
+        confirmation = manager.run.resolve_prerequisites(state, intent)
+        if confirmation is not None:
+            answer = interrupt(
+                {
+                    "kind": "confirmation",
+                    "question": confirmation.question,
+                    "prerequisites": confirmation.prerequisites,
+                    "target_agents": confirmation.target_agents,
+                }
+            )
+            if _is_yes(answer):
+                queue = topological_order(confirmation.prerequisites + confirmation.target_agents)
+            else:
+                state.last_assistant_message = (
+                    "Okay — I won't run those prerequisites. Tell me what you'd like instead."
+                )
+                state.dispatch_queue = []
+                return state
+        else:
+            queue = topological_order(intent.agents)
+
+    # Never re-run an agent whose output already exists in state.
+    state.dispatch_queue = [a for a in queue if not _step_done(state, a)]
+    return state
+
+
+def dispatch_router(state: AgencyState) -> str:
+    """Pick the next agent to run, or finalize when the queue is empty."""
+    return state.dispatch_queue[0] if state.dispatch_queue else "finalize"
+
+
+def make_agent_node(agent_name: str):
+    """Wrap a BaseAgent as a graph node that runs it and pops it from the dispatch queue."""
+    agent = AGENTS[agent_name]
+
+    async def node(state: AgencyState) -> AgencyState:
+        new_state = await agent(state)  # may interrupt() (e.g. clarification HITL)
+        new_state.dispatch_queue = [a for a in new_state.dispatch_queue if a != agent_name]
+        new_state.scratch.setdefault("executed", []).append(agent_name)
+        return new_state
+
+    return node
+
+
+def finalize_node(state: AgencyState) -> AgencyState:
+    """Summarize the turn for the user (unless a node already set an assistant message)."""
+    if state.last_assistant_message:
+        return state
+    executed = state.scratch.get("executed", [])
+    if executed:
+        names = ", ".join(a.replace("_", " ") for a in executed)
+        state.last_assistant_message = (
+            f"Done. I ran: {names}. Ask me for the next step, or say "
+            f"'handle it end to end' to run everything."
+        )
+    else:
+        state.last_assistant_message = "Nothing to do. What would you like next?"
+    return state
+
+
+# ─── Graph assembly ───────────────────────────────────────────────────
+
+
+def build_graph() -> StateGraph:
     g = StateGraph(AgencyState)
 
-    # Nodes
-    g.add_node("manager", manager.run)
-    g.add_node("transcription", transcription.run)
-    g.add_node("requirement", requirement.run)
-    g.add_node("clarification", clarification.run)
-    g.add_node("planning", planning.run)
-    g.add_node("task_generation", task_generation.run)
-    g.add_node("risk", risk.run)
-    g.add_node("proposal", proposal.run)
-    g.add_node("validator", validator.run)
-    g.add_node("executor", executor.run)
+    # control nodes
+    g.add_node("intake", intake_node)
+    g.add_node("intent_classifier", intent_classifier_node)
+    g.add_node("prerequisite_check", prerequisite_check_node)
+    g.add_node("finalize", finalize_node)
 
-    # Edges
-    g.add_edge(START, "manager")
+    # specialist agent nodes (from the registry — manager excluded)
+    for agent_name in AGENTS:
+        g.add_node(agent_name, make_agent_node(agent_name))
 
-    # Manager routes dynamically
+    # dispatch routing map: any agent -> its own node, plus finalize
+    dispatch_map = {name: name for name in AGENTS}
+    dispatch_map["finalize"] = "finalize"
+
+    g.add_edge(START, "intake")
     g.add_conditional_edges(
-        "manager",
-        manager_router,
-        {
-            "transcription": "transcription",
-            "requirement": "requirement",
-            "clarification": "clarification",
-            "planning": "planning",
-            "task_generation": "task_generation",
-            "risk": "risk",
-            "proposal": "proposal",
-            "validator": "validator",
-            "executor": "executor",
-            "__end__": END,
-        },
+        "intake", intake_router, {"classify": "intent_classifier", "end": END}
     )
+    g.add_edge("intent_classifier", "prerequisite_check")
+    g.add_conditional_edges("prerequisite_check", dispatch_router, dispatch_map)
 
-    # Every specialist returns to Manager
-    for node in [
-        "transcription",
-        "requirement",
-        "clarification",
-        "planning",
-        "task_generation",
-        "risk",
-        "proposal",
-    ]:
-        g.add_edge(node, "manager")
+    # after each agent runs, route to the next queued agent (or finalize)
+    for agent_name in AGENTS:
+        g.add_conditional_edges(agent_name, dispatch_router, dispatch_map)
 
-    # Validator has its own router
-    g.add_conditional_edges(
-        "validator",
-        validator_router,
-        {"manager": "manager", "executor": "executor"},
-    )
-
-    g.add_edge("executor", END)
-
+    g.add_edge("finalize", END)
     return g

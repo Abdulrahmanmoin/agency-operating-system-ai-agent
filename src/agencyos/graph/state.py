@@ -117,6 +117,31 @@ class RunSummary(BaseModel):
     incidents: list[str] = Field(default_factory=list)
 
 
+class Intent(BaseModel):
+    """Result of the Manager classifying a free-text user message into target agents."""
+
+    agents: list[str] = Field(
+        default_factory=list,
+        description="Agent names the user's request maps to (subset of the known agent roster).",
+    )
+    full_pipeline: bool = Field(
+        default=False,
+        description="True when the user asked for an end-to-end run (all agents).",
+    )
+    rationale: str = Field(
+        default="",
+        description="Why this mapping was chosen; persisted to the audit log.",
+    )
+
+
+class PendingConfirmation(BaseModel):
+    """A yes/no question the Manager raises before auto-running missing prerequisites."""
+
+    question: str
+    target_agents: list[str]  # what the user originally asked for
+    prerequisites: list[str]  # missing upstream agents we'd run first if confirmed
+
+
 # ─── The big one ──────────────────────────────────────────────────────
 
 
@@ -142,7 +167,15 @@ class AgencyState(BaseModel):
     proposal: Proposal | None = None
     validation_report: ValidationReport | None = None
 
-    # Control
+    # Conversation control (intent-driven, turn-based)
+    last_user_message: str | None = None
+    last_assistant_message: str | None = None
+    intent: Intent | None = None
+    pending_confirmation: PendingConfirmation | None = None
+    capabilities_offered: bool = False  # auto-offer the menu only on the first task-less turn
+    dispatch_queue: list[str] = Field(default_factory=list)  # agents still to run this turn
+
+    # Execution control
     next_action: str | None = None
     paused_for_input: bool = False
     attempt_count: dict[str, int] = Field(default_factory=dict)

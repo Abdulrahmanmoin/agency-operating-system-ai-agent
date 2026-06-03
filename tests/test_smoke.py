@@ -33,7 +33,12 @@ def test_graph_builder_wires_all_agents() -> None:
 
     g = build_graph()
     expected = {
-        "manager",
+        # control nodes
+        "intake",
+        "intent_classifier",
+        "prerequisite_check",
+        "finalize",
+        # specialist agent nodes
         "transcription",
         "requirement",
         "clarification",

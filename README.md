@@ -29,20 +29,30 @@ uv run agencyos run --notes path/to/notes.txt --user you --client acme
 
 ## What it does
 
-A client meeting (audio or notes) goes in. Eleven agents collaborate:
+A client meeting (audio or notes) goes in. AgencyOS is **conversational and intent-driven** — not
+a fixed pipeline. You drop in a transcript and it offers what it can do; you ask in plain language
+and the **Manager** classifies your intent and runs **only the agents needed**:
 
-1. **Manager** orchestrates and routes.
-2. **Transcription** converts audio → text via Groq Whisper.
-3. **Requirement Analysis** extracts goals, services, deadlines, budget, constraints.
-4. **Clarification** flags gaps and pauses for human input (HITL).
-5. **Planning** builds the phased roadmap.
-6. **Task Generation** decomposes into Jira-style tasks with dependencies.
-7. **Risk Analysis** surfaces deadline/budget/scope risks.
-8. **Proposal** drafts client-facing documents.
-9. **Validator** scores everything against a rubric — sends work back for retry if it fails.
-10. **Executor** packages approved artifacts to `outputs/<conversation_id>/` and a `.zip`.
+- **Manager** — interprets your request, routes, asks before running missing prerequisites.
+- **Transcription** — audio → text via Groq Whisper (only if you upload audio).
+- **Requirement Analysis** — extracts goals, services, deadlines, budget, constraints.
+- **Clarification** — flags critical gaps and **pauses for your input** (HITL).
+- **Planning** — phased roadmap and milestones.
+- **Task Generation** — Jira-style tasks with priorities and dependencies.
+- **Risk Analysis** — deadline / budget / scope risks.
+- **Proposal** — client-facing documents.
+- **Validator** — scores against a rubric; gates the executor.
+- **Executor** — packages approved artifacts to `outputs/<conversation_id>/`.
 
-Every agent emits a **reasoning trace** before acting, persisted as message rows in Neon Postgres alongside the artifacts. The conversation thread *is* the memory — no separate vector DB, ChatGPT-style.
+Ask for one thing (*"extract the requirements"*), several (*"plan it and flag the risks"*), or the
+whole thing (*"handle this end to end"*). If you request something whose inputs aren't ready (e.g. a
+proposal before requirements exist), the Manager **asks first** before chaining the prerequisites.
+
+Every agent emits a **reasoning trace** before acting (THINK → ACT → WRITE), recorded in the audit
+log. State persists across turns in **Neon Postgres** via the LangGraph checkpointer — pause, resume,
+and replay any conversation. The chat thread *is* the memory — ChatGPT-style, no separate vector DB.
+
+Try it: `uv run agencyos chat --user you --notes meeting.txt`
 
 ## Why multi-agent
 
@@ -56,4 +66,14 @@ See [ARCHITECTURE.md §1](./ARCHITECTURE.md#1-why-multiple-agents-not-a-single-l
 
 ## Project status
 
-Skeleton complete: state schema, graph topology, agent base class, all 11 agent stubs, tools, memory layer, CLI, observability, tests. Agent `act()` implementations land next.
+**Conversational orchestrator working end to end** (offline-tested, 38 tests passing):
+intent classification, ask-first prerequisite resolution, dynamic agent dispatch, clarification
+HITL, full-pipeline intent, and the CLI `chat` REPL — all on LangGraph interrupts + the Postgres
+checkpointer via the UI-agnostic `orchestrator.run_turn`.
+
+Agents currently return **deterministic placeholder outputs** so routing is fully testable without
+network. Next phase: implement the real `act()` bodies (Groq structured output, Whisper, Tavily,
+file packaging) and the Next.js web UI on top of `run_turn`.
+
+To run against live services, set `GROQ_API_KEY` + Neon `DATABASE_URL` in `.env`, then
+`uv run agencyos chat`.

@@ -1,21 +1,76 @@
-"""ManagerAgent — orchestrator. See ARCHITECTURE.md §2."""
+"""ManagerAgent — orchestrator + intent classifier. See ARCHITECTURE.md §2.
+
+The Manager does NOT do specialist work. Its job is to (1) interpret the user's free-text
+request into a set of target agents (`classify_intent`), and (2) decide, given the current
+state, whether prerequisites are missing and a confirmation is needed (`resolve_prerequisites`).
+"""
 
 from agencyos.agents.base import BaseAgent
-from agencyos.graph.state import AgencyState
+from agencyos.graph.routing import (
+    KNOWN_AGENTS,
+    missing_prerequisites,
+    topological_order,
+)
+from agencyos.graph.state import AgencyState, Intent, PendingConfirmation
+from agencyos.llm import get_chat_model
 
 
 class ManagerAgent(BaseAgent):
     name = "manager"
     role = "Chief of Staff"
-    responsibility = "Route to specialists, handle validator feedback, decide completion."
-    goal = "Deliver a validator-approved package with minimum retries."
+    responsibility = "Interpret requests, route to specialists, handle validator feedback, decide completion."
+    goal = "Deliver what the user asked for with the minimum necessary agents and retries."
 
+    async def classify_intent(self, state: AgencyState) -> Intent:
+        """Map the user's latest free-text message to target agents via the LLM."""
+        from agencyos import prompts
+        from agencyos.agents.registry import capabilities
+
+        system = prompts.render("system/manager_intent.j2", capabilities=capabilities())
+        model = get_chat_model("manager", temperature=0.0).with_structured_output(Intent)
+        intent: Intent = await model.ainvoke(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": state.last_user_message or ""},
+            ]
+        )
+        # Defensive: drop hallucinated agent names; keep order the model gave.
+        intent.agents = [a for a in intent.agents if a in KNOWN_AGENTS]
+        return intent
+
+    def resolve_prerequisites(
+        self, state: AgencyState, intent: Intent
+    ) -> PendingConfirmation | None:
+        """If the requested agents need upstream outputs that don't exist yet, build a
+        confirmation question. Returns None when everything needed is already present."""
+        if intent.full_pipeline:
+            return None  # full pipeline runs everything in order; nothing to confirm
+
+        prereqs: list[str] = []
+        for agent in intent.agents:
+            for p in missing_prerequisites(state, agent):
+                if p not in prereqs and p not in intent.agents:
+                    prereqs.append(p)
+        if not prereqs:
+            return None
+
+        ordered = topological_order(prereqs)
+        pretty = ", ".join(p.replace("_", " ") for p in ordered)
+        want = ", ".join(a.replace("_", " ") for a in intent.agents)
+        return PendingConfirmation(
+            question=(
+                f"To do {want}, I first need to run: {pretty}. "
+                f"Shall I run those first? (yes/no)"
+            ),
+            target_agents=list(intent.agents),
+            prerequisites=ordered,
+        )
+
+    # ── BaseAgent contract (Manager produces no specialist payload) ──
     async def reason(self, state: AgencyState) -> str:
-        # TODO: render prompts/system/manager.j2 + reasoning_rubric partial
-        return f"Inspecting state; next routing decision will be made by manager_router."
+        return "Manager orchestration step; routing handled by the graph."
 
     async def act(self, state: AgencyState, reasoning: str) -> dict:
-        # Manager itself produces no payload — routing is handled by manager_router.
         return {"acknowledged": True}
 
     def merge(self, state: AgencyState, output: dict) -> AgencyState:

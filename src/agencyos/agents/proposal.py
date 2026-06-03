@@ -14,7 +14,14 @@ class ProposalAgent(BaseAgent):
         return "Synthesizing requirements + plan + tasks into client-facing proposal sections."
 
     async def act(self, state: AgencyState, reasoning: str) -> Proposal:
-        raise NotImplementedError("ProposalAgent.act not yet implemented")
+        # PLACEHOLDER: real client-facing drafting lands later.
+        return Proposal(
+            executive_summary="(placeholder) executive summary",
+            scope="(placeholder) scope",
+            timeline="(placeholder) timeline",
+            pricing="(placeholder) pricing",
+            next_steps="(placeholder) next steps",
+        )
 
     def merge(self, state: AgencyState, output: Proposal) -> AgencyState:
         state.proposal = output

@@ -1,0 +1,11 @@
+Hi - I'm **AgencyOS**. You've shared {{ input_kind }}, but you haven't told me what you'd like done with it yet.
+
+Here's what I can do - just ask in plain language:
+
+{% for c in capabilities %}
+- **{{ c.display_name }}** - {{ c.responsibility }}
+{% endfor %}
+
+You can ask for one thing (e.g. *"extract the requirements"*), several at once (e.g. *"plan it and flag the risks"*), or the whole thing (e.g. *"handle this end to end"*).
+
+What would you like me to do?

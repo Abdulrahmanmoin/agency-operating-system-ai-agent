@@ -1,45 +1,44 @@
-# Sequence diagram — one end-to-end run
+# Sequence diagram — a conversational session
+
+Each user message is one `run_turn`. The graph runs only the agents the intent needs; the
+checkpointer persists state between turns. Two interrupt types are shown: prerequisite
+confirmation and clarification HITL.
 
 ```mermaid
 sequenceDiagram
     actor U as User
-    participant CLI
-    participant G as LangGraph
+    participant CLI as CLI / Web
+    participant O as orchestrator.run_turn
+    participant G as LangGraph (+Postgres checkpointer)
     participant M as Manager
-    participant T as Transcription
-    participant R as Requirement
-    participant C as Clarification
-    participant P as Planning
-    participant TG as TaskGen
-    participant Rk as Risk
-    participant Pr as Proposal
-    participant V as Validator
-    participant E as Executor
+    participant A as Specialist agents
     participant DB as Neon Postgres
 
-    U->>CLI: agencyos run --audio meeting.mp3
-    CLI->>G: ainvoke(initial state)
-    G->>M: route
-    M->>T: transcribe
-    T->>DB: append message(reasoning + transcript)
-    T-->>M: transcript
-    M->>R: extract requirements
-    R-->>M: Requirements
-    M->>C: detect gaps
-    C->>U: HITL prompt (via CLI)
-    U-->>C: answers
-    C-->>M: clarifications resolved
-    M->>P: plan
-    M->>TG: tasks
-    M->>Rk: risks
-    M->>Pr: proposal
-    M->>V: validate
-    alt approved
-        V->>E: package
-        E->>DB: persist run_summary
-        E-->>CLI: done(output_path)
-    else rejected (< 3 attempts)
-        V-->>M: feedback + target_agent
-        M->>Pr: retry with feedback
-    end
+    U->>CLI: upload transcript (no task)
+    CLI->>O: run_turn(cid, None)
+    O->>G: ainvoke(seed)
+    G->>M: intake
+    M-->>O: capabilities offer
+    O-->>CLI: TurnResult(message)
+    CLI-->>U: "Here's what I can do…"
+
+    U->>CLI: "draft a proposal"
+    CLI->>O: run_turn(cid, "draft a proposal")
+    O->>G: ainvoke({last_user_message})
+    G->>M: classify_intent → {agents:[proposal]}
+    G->>M: prerequisite_check → missing [requirement, planning]
+    M-->>O: interrupt(confirmation)
+    O-->>CLI: TurnResult(awaiting_confirmation)
+    CLI-->>U: "Run requirement, planning first? (yes/no)"
+
+    U->>CLI: "yes"
+    CLI->>O: run_turn(cid, "yes")
+    O->>G: ainvoke(Command(resume="yes"))
+    G->>A: requirement → planning → proposal (dispatch loop)
+    A->>DB: checkpoint after each agent
+    Note over A: if clarification ran and a critical field<br/>was missing, it would interrupt here too
+    G->>M: finalize (summary)
+    M-->>O: assistant message
+    O-->>CLI: TurnResult(message)
+    CLI-->>U: "Done. I ran: requirement, planning, proposal."
 ```

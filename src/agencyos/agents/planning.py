@@ -14,7 +14,13 @@ class PlanningAgent(BaseAgent):
         return "Building phased plan from requirements; will consult past templates and industry benchmarks."
 
     async def act(self, state: AgencyState, reasoning: str) -> Plan:
-        raise NotImplementedError("PlanningAgent.act not yet implemented")
+        # PLACEHOLDER: real roadmap synthesis lands later.
+        from agencyos.graph.state import Milestone
+
+        return Plan(
+            summary="(placeholder) phased plan derived from requirements",
+            phases=[Milestone(name="Phase 1", description="(placeholder)")],
+        )
 
     def merge(self, state: AgencyState, output: Plan) -> AgencyState:
         state.plan = output

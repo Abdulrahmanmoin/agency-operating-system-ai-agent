@@ -1,10 +1,31 @@
-"""Conditional routing functions used by Manager and Validator nodes."""
+"""Routing + dependency resolution for the intent-driven orchestrator.
+
+The system is conversational, not a fixed pipeline: the Manager classifies the user's intent
+into a set of target agents, and we run only those agents (plus any prerequisites the user
+confirms). This module owns the *dependency graph* between agents and the helpers that turn a
+requested set of agents into an ordered, prerequisite-complete execution list.
+"""
 
 from agencyos.graph.state import AgencyState
 
-# Order specialists run in on a clean path (no validator feedback).
-SPECIALIST_ORDER = [
-    "transcription",
+# ─── Agent dependency graph ───────────────────────────────────────────
+# Maps an agent -> the agents whose outputs it requires before it can run.
+# (Input prerequisites like "audio file" or "transcript/notes" are checked via _step_done /
+#  input presence, not listed here.)
+DEPENDENCIES: dict[str, list[str]] = {
+    "transcription": [],
+    "requirement": [],
+    "clarification": ["requirement"],
+    "planning": ["requirement"],
+    "task_generation": ["planning"],
+    "risk": ["planning", "task_generation"],
+    "proposal": ["requirement", "planning"],
+    "validator": ["proposal"],
+    "executor": ["validator"],
+}
+
+# Canonical order for a full end-to-end run ("do everything" intent).
+FULL_PIPELINE: list[str] = [
     "requirement",
     "clarification",
     "planning",
@@ -12,51 +33,22 @@ SPECIALIST_ORDER = [
     "risk",
     "proposal",
     "validator",
+    "executor",
 ]
 
-
-def manager_router(state: AgencyState) -> str:
-    """Decide the next node from the Manager.
-
-    Priority:
-      1. If Validator rejected and we have retries left → re-dispatch named agent.
-      2. If paused_for_input → END (CLI handles HITL pause).
-      3. Otherwise advance through SPECIALIST_ORDER based on what's filled in state.
-    """
-    if state.paused_for_input:
-        return "__end__"
-
-    vr = state.validation_report
-    if vr is not None and not vr.approved and vr.target_agent:
-        from agencyos.config import settings
-
-        attempts = state.attempt_count.get(vr.target_agent, 0)
-        if attempts < settings.max_validator_retries:
-            return vr.target_agent
-
-    # Skip transcription if input is text
-    if state.transcript is None and state.audio_path is None:
-        # text input — synthesize transcript from notes upstream of requirement
-        pass
-
-    for step in SPECIALIST_ORDER:
-        if not _step_done(state, step):
-            # Skip transcription if not audio
-            if step == "transcription" and state.audio_path is None:
-                continue
-            return step
-
-    return "executor"
+KNOWN_AGENTS: frozenset[str] = frozenset(DEPENDENCIES)
 
 
 def _step_done(state: AgencyState, step: str) -> bool:
+    """Whether an agent's output already exists in state (i.e. it need not run again)."""
     match step:
         case "transcription":
             return state.transcript is not None
         case "requirement":
             return state.requirements is not None
         case "clarification":
-            return state.clarifications is not None and not any(
+            # "done" only once every critical clarification has a user answer
+            return bool(state.clarifications) and not any(
                 c.user_answer is None and c.severity.value == "critical"
                 for c in state.clarifications
             )
@@ -65,17 +57,69 @@ def _step_done(state: AgencyState, step: str) -> bool:
         case "task_generation":
             return bool(state.tasks)
         case "risk":
-            return state.risks is not None
+            return bool(state.risks)
         case "proposal":
             return state.proposal is not None
         case "validator":
             return state.validation_report is not None and state.validation_report.approved
+        case "executor":
+            return state.run_summary is not None and state.run_summary.output_path is not None
         case _:
             return False
 
 
+def missing_prerequisites(state: AgencyState, agent: str) -> list[str]:
+    """Transitively collect prerequisite agents for `agent` whose output isn't in state yet.
+
+    Returned in dependency order (deepest prerequisites first), de-duplicated.
+    """
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    def visit(name: str) -> None:
+        for dep in DEPENDENCIES.get(name, []):
+            if dep in seen:
+                continue
+            visit(dep)
+            if not _step_done(state, dep) and dep not in ordered:
+                ordered.append(dep)
+            seen.add(dep)
+
+    visit(agent)
+    return ordered
+
+
+def topological_order(agents: list[str]) -> list[str]:
+    """Order a requested set of agents (and only those) so dependencies come first.
+
+    Unknown agent names are dropped. The input set is treated as the universe — we do NOT
+    pull in prerequisites here (that's `missing_prerequisites`' job); we only order what's given.
+    """
+    requested = [a for a in agents if a in KNOWN_AGENTS]
+    requested_set = set(requested)
+    result: list[str] = []
+    visiting: set[str] = set()
+    done: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in done or name not in requested_set:
+            return
+        if name in visiting:
+            return  # cycle guard (DEPENDENCIES is a DAG, but be safe)
+        visiting.add(name)
+        for dep in DEPENDENCIES.get(name, []):
+            visit(dep)
+        visiting.discard(name)
+        done.add(name)
+        result.append(name)
+
+    for a in requested:
+        visit(a)
+    return result
+
+
 def validator_router(state: AgencyState) -> str:
-    """After Validator runs: approve → executor, reject → back to Manager."""
+    """After Validator runs: approve → executor, reject → back to manager for re-dispatch."""
     vr = state.validation_report
     if vr is not None and vr.approved:
         return "executor"

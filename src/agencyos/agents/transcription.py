@@ -14,8 +14,11 @@ class TranscriptionAgent(BaseAgent):
         return f"Transcribing audio at {state.audio_path} via Groq Whisper."
 
     async def act(self, state: AgencyState, reasoning: str) -> dict:
-        # TODO: call tools.transcription.groq_whisper_transcribe(state.audio_path)
-        raise NotImplementedError("TranscriptionAgent.act not yet implemented")
+        # PLACEHOLDER: real Groq Whisper call lands later.
+        return {
+            "transcript": f"(placeholder transcript of {state.audio_path})",
+            "meta": {"duration_sec": 0.0, "speaker_count": 1, "language": "en"},
+        }
 
     def merge(self, state: AgencyState, output: dict) -> AgencyState:
         state.transcript = output["transcript"]
