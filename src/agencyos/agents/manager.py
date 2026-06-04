@@ -12,7 +12,7 @@ from agencyos.graph.routing import (
     topological_order,
 )
 from agencyos.graph.state import AgencyState, Intent, PendingConfirmation
-from agencyos.llm import get_chat_model
+from agencyos.llm import ainvoke_structured, get_chat_model
 
 
 class ManagerAgent(BaseAgent):
@@ -28,11 +28,12 @@ class ManagerAgent(BaseAgent):
 
         system = prompts.render("system/manager_intent.j2", capabilities=capabilities())
         model = get_chat_model("manager", temperature=0.0).with_structured_output(Intent)
-        intent: Intent = await model.ainvoke(
+        intent: Intent = await ainvoke_structured(
+            model,
             [
                 {"role": "system", "content": system},
                 {"role": "user", "content": state.last_user_message or ""},
-            ]
+            ],
         )
         # Defensive: drop hallucinated agent names; keep order the model gave.
         intent.agents = [a for a in intent.agents if a in KNOWN_AGENTS]

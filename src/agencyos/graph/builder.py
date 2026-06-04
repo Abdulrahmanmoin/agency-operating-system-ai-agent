@@ -21,6 +21,7 @@ from agencyos.agents.registry import AGENTS, capabilities_text
 from agencyos.graph.routing import (
     FULL_PIPELINE,
     _step_done,
+    reset_agent_output,
     topological_order,
 )
 from agencyos.graph.state import AgencyState, AuditEntry, AuditPhase
@@ -78,6 +79,12 @@ def prerequisite_check_node(state: AgencyState) -> AgencyState:
     """Decide the dispatch queue. May interrupt to ask the user about missing prerequisites."""
     intent = state.intent
     assert intent is not None
+
+    # Regenerate/redo: wipe the targeted agents' stored output so they actually re-run
+    # (otherwise they'd be considered "done" and skipped, just re-showing the cached result).
+    if intent.regenerate:
+        for agent_name in FULL_PIPELINE if intent.full_pipeline else intent.agents:
+            reset_agent_output(state, agent_name)
 
     if intent.full_pipeline:
         queue = topological_order(FULL_PIPELINE)

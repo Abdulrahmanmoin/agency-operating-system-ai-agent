@@ -87,7 +87,15 @@ def chat(
                 if not user_input:
                     continue
 
-                res = await turn(user_input)
+                try:
+                    res = await turn(user_input)
+                except Exception as exc:  # noqa: BLE001 — keep the REPL alive on any turn failure
+                    console.print(
+                        f"\n[red]Sorry — that turn failed ({type(exc).__name__}).[/red] "
+                        "This is usually a temporary network/LLM issue. "
+                        "Your conversation is intact — just send the message again.\n"
+                    )
+                    continue
                 _print_assistant(res.message or res.question)
 
     asyncio.run(_loop())

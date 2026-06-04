@@ -13,4 +13,8 @@ Rules:
 - If the user asks for an end-to-end / full / complete run (e.g. "do everything", "handle it all",
   "give me the full proposal package"), set `full_pipeline` to true; you may leave `agents` empty.
 - If the request maps to nothing we offer, return an empty `agents` list with `full_pipeline` false.
+- Set `regenerate` to true when the user wants to REDO or replace an existing result from scratch
+  (e.g. "regenerate the plan", "redo the proposal", "give me a different plan", "try the risks
+  again"). Still set `agents` to the agent(s) to redo. Leave `regenerate` false for normal first-time
+  requests.
 - Put a one-sentence justification in `rationale`.

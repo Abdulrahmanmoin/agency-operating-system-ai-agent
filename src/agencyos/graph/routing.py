@@ -68,6 +68,31 @@ def _step_done(state: AgencyState, step: str) -> bool:
             return False
 
 
+def reset_agent_output(state: AgencyState, agent: str) -> None:
+    """Clear an agent's stored output so it will run again (used for regenerate/redo)."""
+    match agent:
+        case "transcription":
+            state.transcript = None
+            state.transcript_meta = None
+        case "requirement":
+            state.requirements = None
+        case "clarification":
+            state.clarifications = []
+        case "planning":
+            state.plan = None
+        case "task_generation":
+            state.tasks = []
+        case "risk":
+            state.risks = []
+        case "proposal":
+            state.proposal = None
+        case "validator":
+            state.validation_report = None
+            state.attempt_count.pop("validation", None)
+        case "executor":
+            state.run_summary = None
+
+
 def missing_prerequisites(state: AgencyState, agent: str) -> list[str]:
     """Transitively collect prerequisite agents for `agent` whose output isn't in state yet.
 

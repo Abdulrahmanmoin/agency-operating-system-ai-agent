@@ -156,6 +156,10 @@ class Intent(_Payload):
         default=False,
         description="True when the user asked for an end-to-end run (all agents).",
     )
+    regenerate: bool = Field(
+        default=False,
+        description="True when the user asked to redo/regenerate an existing result from scratch.",
+    )
     rationale: str = Field(
         default="",
         description="Why this mapping was chosen; persisted to the audit log.",

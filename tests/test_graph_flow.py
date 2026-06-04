@@ -83,6 +83,42 @@ async def test_unmappable_request_asks_to_rephrase(monkeypatch):
     assert "rephrase" in out["last_assistant_message"]
 
 
+async def test_regenerate_reruns_existing_agent(monkeypatch):
+    from agencyos.graph.state import Milestone, Plan, Requirements
+
+    _patch_intent(monkeypatch, Intent(agents=["planning"], regenerate=True))
+    app = _compile()
+    state = AgencyState(
+        user_id="u",
+        transcript="b",
+        requirements=Requirements(client_goals=["g"]),
+        plan=Plan(summary="OLD plan", phases=[Milestone(name="Old", description="old")]),
+        last_user_message="regenerate the plan",
+    )
+    out = await app.ainvoke(state, _cfg("t-regen"))
+    # planning actually re-ran (not just re-shown) and replaced the old plan
+    assert "planning" in out["scratch"]["executed"]
+    assert out["plan"].summary == "(stub plan)"
+
+
+async def test_no_regenerate_reuses_cached_output(monkeypatch):
+    from agencyos.graph.state import Milestone, Plan, Requirements
+
+    _patch_intent(monkeypatch, Intent(agents=["planning"], regenerate=False))
+    app = _compile()
+    state = AgencyState(
+        user_id="u",
+        transcript="b",
+        requirements=Requirements(client_goals=["g"]),
+        plan=Plan(summary="OLD plan", phases=[Milestone(name="Old", description="old")]),
+        last_user_message="show me the plan",
+    )
+    out = await app.ainvoke(state, _cfg("t-cache"))
+    # planning did NOT re-run; the existing plan is shown unchanged
+    assert "planning" not in out["scratch"].get("executed", [])
+    assert out["plan"].summary == "OLD plan"
+
+
 async def test_full_pipeline_runs_everything(monkeypatch):
     _patch_intent(monkeypatch, Intent(full_pipeline=True))
     app = _compile()
