@@ -7,6 +7,7 @@ backend reuses `run_turn` identically (no `input()` there — the pausing lives 
 
 import asyncio
 import sys
+import warnings
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -15,6 +16,9 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from agencyos.orchestrator import open_session
+
+# Keep the interactive console clean: hide LangGraph's msgpack "unregistered type" notice.
+warnings.filterwarnings("ignore", message=".*nregistered type.*")
 
 # psycopg's async driver (used by the LangGraph Postgres checkpointer) cannot run on Windows'
 # default ProactorEventLoop — it requires the selector loop. Set the policy before any asyncio.run.

@@ -144,18 +144,28 @@ def make_agent_node(agent_name: str):
 
 
 def finalize_node(state: AgencyState) -> AgencyState:
-    """Summarize the turn for the user (unless a node already set an assistant message)."""
+    """Show the user what was produced this turn (the actual artifacts, not just status)."""
     if state.last_assistant_message:
         return state
-    executed = state.scratch.get("executed", [])
-    if executed:
-        names = ", ".join(a.replace("_", " ") for a in executed)
-        state.last_assistant_message = (
-            f"Done. I ran: {names}. Ask me for the next step, or say "
-            f"'handle it end to end' to run everything."
-        )
+
+    from agencyos.views import summarize
+
+    intent = state.intent
+    if intent is not None and intent.full_pipeline:
+        scope = ["proposal", "validator", "executor"]  # headline outputs of a full run
+    elif intent is not None and intent.agents:
+        scope = intent.agents  # show what the user asked for (even if already present)
     else:
-        state.last_assistant_message = "Nothing to do. What would you like next?"
+        scope = state.scratch.get("executed", [])
+
+    body = summarize(state, scope)
+    if body:
+        state.last_assistant_message = body
+    else:
+        state.last_assistant_message = (
+            "I'm not sure which of my capabilities that maps to — try e.g. "
+            "'extract the requirements', 'plan it and flag the risks', or 'handle it end to end'."
+        )
     return state
 
 

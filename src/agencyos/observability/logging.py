@@ -1,7 +1,6 @@
-"""structlog configuration. JSON to file, pretty to console."""
+"""structlog configuration. JSON logs go to a file; the console stays clean for the CLI."""
 
 import logging
-import sys
 from pathlib import Path
 
 import structlog
@@ -19,13 +18,16 @@ def _configure() -> None:
     log_path = Path("logs")
     log_path.mkdir(exist_ok=True)
     file_handler = logging.FileHandler(log_path / "agencyos.log", encoding="utf-8")
-    stream_handler = logging.StreamHandler(sys.stderr)
 
+    # File-only: keeps agent/tool traces out of the interactive CLI. Inspect logs/agencyos.log.
     logging.basicConfig(
         level=settings.log_level,
         format="%(message)s",
-        handlers=[file_handler, stream_handler],
+        handlers=[file_handler],
     )
+    # Third-party INFO chatter (HTTP requests, etc.) → file only, and only warnings+.
+    for noisy in ("httpx", "httpcore", "groq", "langgraph", "langchain"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     structlog.configure(
         processors=[
@@ -36,6 +38,9 @@ def _configure() -> None:
             structlog.processors.format_exc_info,
             structlog.processors.JSONRenderer(),
         ],
+        # Route through stdlib logging so logs obey the file-only handler above (structlog's
+        # default factory writes straight to stdout, which would clutter the interactive CLI).
+        logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.make_filtering_bound_logger(
             logging.getLevelName(settings.log_level)
         ),

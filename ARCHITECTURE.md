@@ -4,6 +4,16 @@
 
 ---
 
+## TODO — future work
+
+- **Next.js frontend: per-artifact downloads.** Each agent's output (plan, proposal, requirements,
+  tasks, risks) should be individually **downloadable** from the web UI (e.g. `plan.json`,
+  `proposal.md`/`.pdf`), not only shown in chat. The shared state already carries every artifact;
+  this is a presentation feature built on `orchestrator.run_turn`. CLI behavior is unchanged
+  (the Executor writes files only on a full run or an explicit "save/package" request).
+
+---
+
 ## 1. Why multiple agents (not a single LLM)
 
 | Concern | Single LLM with prompts | AgencyOS (multi-agent) |

@@ -42,7 +42,9 @@ async def test_continuing_turn_runs_agent(monkeypatch):
     # second turn: a real instruction on the SAME thread
     res = await drive_turn(app, cid, user_message="extract requirements")
     assert res.kind == "message"
-    assert "requirement" in res.message
+    # the message now shows the actual extracted requirements, not just a status line
+    assert "Requirements" in res.message
+    assert "(stub goal)" in res.message
 
 
 async def test_confirmation_interrupt_then_resume(monkeypatch):
@@ -58,4 +60,4 @@ async def test_confirmation_interrupt_then_resume(monkeypatch):
     # resume with "yes"
     final = await drive_turn(app, cid, user_message="yes")
     assert final.kind == "message"
-    assert "proposal" in final.message
+    assert "Proposal" in final.message  # the drafted proposal is shown back to the user
