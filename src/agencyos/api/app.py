@@ -20,9 +20,11 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI, File, HTTPException, UploadFile  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import Response  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from agencyos import views  # noqa: E402
+from agencyos.api import exporters  # noqa: E402
 from agencyos.graph.builder import build_graph  # noqa: E402
 from agencyos.graph.state import AgencyState  # noqa: E402
 from agencyos.memory.checkpointer import checkpointer_cm  # noqa: E402
@@ -78,6 +80,10 @@ class _Session:
             return []
         cards: list[dict] = []
         for name, (render, present) in views._RENDERERS.items():
+            # The clarification renderer is always "present" (it reports "no gaps"); in the panel we
+            # only want a card once there are actual clarifications, not on every conversation.
+            if name == "clarification" and not state.clarifications:
+                continue
             if present(state):
                 markdown = render(state)
                 if markdown:
@@ -237,6 +243,24 @@ async def upload_file(conversation_id: UUID, file: UploadFile = File(...)) -> Up
     raise HTTPException(
         status_code=415,
         detail=f"Unsupported file type '{suffix}'. Use pdf, txt, docx, or audio (mp3/wav/m4a).",
+    )
+
+
+@app.get("/api/conversations/{conversation_id}/download/{agent}")
+async def download_artifact(conversation_id: UUID, agent: str, fmt: str = "pdf") -> Response:
+    """Download a single agent's artifact as a .docx or .pdf."""
+    if fmt not in ("docx", "pdf"):
+        raise HTTPException(status_code=400, detail="fmt must be 'docx' or 'pdf'.")
+    session = await _get_session(conversation_id)
+    card = next((c for c in await session.artifacts() if c["agent"] == agent), None)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"No '{agent}' artifact yet.")
+    data, mime = exporters.render(fmt, card["title"], card["markdown"])
+    filename = f"{agent}.{fmt}"
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

@@ -80,6 +80,27 @@ def prerequisite_check_node(state: AgencyState) -> AgencyState:
     intent = state.intent
     assert intent is not None
 
+    # Source-material gate: the specialists extract/plan/etc. FROM meeting data. With no notes,
+    # no audio, and nothing already extracted there is nothing to work from, so refuse rather than
+    # fabricate a generic result. Existing requirements count as proof material was provided.
+    wants_work = intent.full_pipeline or bool(intent.agents)
+    has_material = bool(state.source_material() or state.audio_path or state.requirements)
+    if wants_work and not has_material:
+        state.audit_log.append(
+            AuditEntry(
+                agent="manager",
+                phase=AuditPhase.ROUTE,
+                content="refused: no source material (no notes/transcript/audio) to act on.",
+            )
+        )
+        state.last_assistant_message = (
+            "I don't have any meeting data to work from yet, so I can't run that. "
+            "Please attach meeting notes (**.txt**, **.pdf**, or **.docx**) or an **audio** "
+            "recording with the 📎 button, then ask me again."
+        )
+        state.dispatch_queue = []
+        return state
+
     # Regenerate/redo: wipe the targeted agents' stored output so they actually re-run
     # (otherwise they'd be considered "done" and skipped, just re-showing the cached result).
     if intent.regenerate:
