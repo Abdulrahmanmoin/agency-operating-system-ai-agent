@@ -9,15 +9,19 @@ Run:  uvicorn agencyos.api.app:app --reload --port 8000
 """
 
 import asyncio
+import logging
 import sys
+from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from pathlib import Path
+from typing import TypeVar
 from uuid import UUID, uuid4
 
 # psycopg's async driver (LangGraph Postgres checkpointer) needs the selector loop on Windows.
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+import psycopg  # noqa: E402
 from fastapi import FastAPI, File, HTTPException, UploadFile  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import Response  # noqa: E402
@@ -49,9 +53,27 @@ _ARTIFACT_TITLES = {
     "executor": "Saved Package",
 }
 
+_log = logging.getLogger("agencyos.api")
+_T = TypeVar("_T")
+
+
+def _is_dead_connection(exc: BaseException) -> bool:
+    """Whether an error means the Postgres connection died (so reconnecting + retrying is worth it).
+
+    Neon (serverless) auto-suspends and drops idle connections, so a long-lived connection can be
+    closed underneath us. psycopg surfaces that as OperationalError/InterfaceError (e.g. "SSL
+    connection has been closed unexpectedly", "consuming input failed", "server closed the
+    connection unexpectedly"). Those are connection-level, not query bugs → safe to reconnect.
+    """
+    return isinstance(exc, (psycopg.OperationalError, psycopg.InterfaceError))
+
 
 class _Session:
-    """One conversation: a dedicated Postgres connection + compiled graph, kept open across turns."""
+    """One conversation: a dedicated Postgres connection + compiled graph, kept open across turns.
+
+    The connection is reused for speed (no per-turn reconnect). If it has been dropped while idle
+    (Neon auto-suspend), the next operation reopens it and retries once — transparent to the user.
+    """
 
     def __init__(self, conversation_id: UUID) -> None:
         self.conversation_id = conversation_id
@@ -64,11 +86,40 @@ class _Session:
         saver = await self._stack.enter_async_context(checkpointer_cm())
         self.app = build_graph().compile(checkpointer=saver)
 
-    async def turn(self, message: str | None):
+    async def _reconnect(self) -> None:
+        """Tear down the dead connection and open a fresh one (graph state lives in Postgres)."""
+        try:
+            await self._stack.aclose()
+        except Exception:  # noqa: BLE001 — the old connection is already broken; ignore cleanup errors
+            pass
+        self._stack = AsyncExitStack()
+        await self.start()
+
+    async def _with_reconnect(self, op: Callable[[], Awaitable[_T]]) -> _T:
+        """Run an async DB operation; if the connection was dropped, reopen it and retry once."""
         async with self._lock:
-            return await drive_turn(self.app, self.conversation_id, message, seed=self.seed)
+            try:
+                return await op()
+            except Exception as exc:  # noqa: BLE001 — only swallow dead-connection errors
+                if not _is_dead_connection(exc):
+                    raise
+                _log.warning(
+                    "Postgres connection for %s was dropped (%s); reconnecting and retrying.",
+                    self.conversation_id,
+                    type(exc).__name__,
+                )
+                await self._reconnect()
+                return await op()  # one retry on the fresh connection
+
+    async def turn(self, message: str | None):
+        return await self._with_reconnect(
+            lambda: drive_turn(self.app, self.conversation_id, message, seed=self.seed)
+        )
 
     async def artifacts(self) -> list[dict]:
+        return await self._with_reconnect(self._artifacts)
+
+    async def _artifacts(self) -> list[dict]:
         cfg = {"configurable": {"thread_id": str(self.conversation_id)}}
         snapshot = await self.app.aget_state(cfg)
         values = snapshot.values or {}
@@ -92,6 +143,11 @@ class _Session:
                     )
         return cards
 
+    async def update_state(self, values: dict) -> None:
+        """Merge values into the persisted graph state (used by uploads), with reconnect."""
+        cfg = {"configurable": {"thread_id": str(self.conversation_id)}}
+        await self._with_reconnect(lambda: self.app.aupdate_state(cfg, values))
+
     async def close(self) -> None:
         await self._stack.aclose()
 
@@ -101,9 +157,23 @@ _SESSIONS_LOCK = asyncio.Lock()
 
 
 async def _get_session(conversation_id: UUID) -> _Session:
+    """Return the in-memory session, rehydrating it if we don't have one.
+
+    Sessions are in-process only, so after a server restart an old conversation_id is unknown here
+    even though its full history is still persisted in Postgres (keyed by thread_id). Rather than
+    404, we reopen a session for that id — the checkpointer loads the existing state, so the user
+    continues the same conversation seamlessly.
+    """
     session = _SESSIONS.get(conversation_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Unknown conversation. Create one first.")
+    if session is not None:
+        return session
+    async with _SESSIONS_LOCK:
+        session = _SESSIONS.get(conversation_id)  # re-check under lock (avoid double-open on a race)
+        if session is None:
+            _log.info("Rehydrating session %s from persisted state.", conversation_id)
+            session = _Session(conversation_id)
+            await session.start()
+            _SESSIONS[conversation_id] = session
     return session
 
 
@@ -212,10 +282,8 @@ async def upload_file(conversation_id: UUID, file: UploadFile = File(...)) -> Up
     dest = dest_dir / filename
     dest.write_bytes(await file.read())
 
-    cfg = {"configurable": {"thread_id": str(conversation_id)}}
-
     if suffix in _AUDIO_EXTS:
-        await session.app.aupdate_state(cfg, {"audio_path": str(dest)})
+        await session.update_state({"audio_path": str(dest)})
         return UploadResponse(
             kind="audio",
             filename=filename,
@@ -230,7 +298,7 @@ async def upload_file(conversation_id: UUID, file: UploadFile = File(...)) -> Up
             text = load_document(dest)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=422, detail=f"Could not read {filename}: {exc}") from exc
-        await session.app.aupdate_state(cfg, {"notes_text": text, "notes_path": str(dest)})
+        await session.update_state({"notes_text": text, "notes_path": str(dest)})
         return UploadResponse(
             kind="notes",
             filename=filename,
