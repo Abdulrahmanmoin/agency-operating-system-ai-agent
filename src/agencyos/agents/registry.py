@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from agencyos.agents import (
     clarification,
-    executor,
+    clickup,
     planning,
     proposal,
     requirement,
@@ -22,6 +22,10 @@ from agencyos.agents.base import BaseAgent
 
 # Ordered list of capability agents (Manager is the orchestrator, not a capability).
 # Order = the natural left-to-right reading order of the menu.
+# NOTE: the Executor agent (agents/executor.py) is intentionally NOT registered — its job was to
+# save the package to the SERVER's disk, which a web user can't reach (the web UI downloads each
+# artifact on demand instead). The module is kept dormant so it can be re-added here if a CLI/
+# server-side bundle + audit-log/run-metrics deliverable is needed again.
 _CAPABILITY_AGENTS: list[BaseAgent] = [
     transcription.run,
     requirement.run,
@@ -31,7 +35,7 @@ _CAPABILITY_AGENTS: list[BaseAgent] = [
     risk.run,
     proposal.run,
     validator.run,
-    executor.run,
+    clickup.run,
 ]
 
 # name -> agent instance, for dispatch lookups elsewhere.

@@ -1,4 +1,9 @@
-"""ValidatorAgent — score the package against a rubric, gate the executor, bounce work back."""
+"""ValidatorAgent — score the package against a rubric, approve it, or bounce work back.
+
+Validator is the final step of a full pipeline (the Executor that once followed it on approval has
+been removed — the web UI downloads each artifact on demand instead). On approval the queue simply
+drains to `finalize`; on rejection it re-queues one target agent then itself, up to a retry cap.
+"""
 
 from pydantic import BaseModel, Field
 
@@ -90,13 +95,13 @@ class ValidatorAgent(BaseAgent):
     def merge(self, state: AgencyState, output: ValidationReport) -> AgencyState:
         state.validation_report = output
         if output.approved:
-            return state  # gate opens; executor (if queued) runs next
+            return state  # approved; queue drains to finalize
 
         attempts = state.attempt_count.get("validation", 0)
         target = output.target_agent
         if target in KNOWN_AGENTS and attempts < settings.max_validator_retries:
-            # Bounce back: re-run the target agent, then re-validate, keeping whatever followed
-            # validator (e.g. executor) gated until approval.
+            # Bounce back: re-run the target agent, then re-validate, preserving any agents queued
+            # after validator until it approves.
             state.attempt_count["validation"] = attempts + 1
             following = [a for a in state.dispatch_queue[1:] if a not in {target, "validator"}]
             state.dispatch_queue = [target, "validator", *following]

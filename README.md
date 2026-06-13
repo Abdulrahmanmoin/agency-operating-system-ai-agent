@@ -41,8 +41,8 @@ and the **Manager** classifies your intent and runs **only the agents needed**:
 - **Task Generation** — Jira-style tasks with priorities and dependencies.
 - **Risk Analysis** — deadline / budget / scope risks.
 - **Proposal** — client-facing documents.
-- **Validator** — scores against a rubric; gates the executor.
-- **Executor** — packages approved artifacts to `outputs/<conversation_id>/`.
+- **Validator** — scores the package against a rubric; on a fail, sends one agent back to revise (self-correcting loop), then approves.
+- **ClickUp** — creates tickets from the generated tasks or a free-form request, **after you confirm** (via the ClickUp MCP server).
 
 Ask for one thing (*"extract the requirements"*), several (*"plan it and flag the risks"*), or the
 whole thing (*"handle this end to end"*). If you request something whose inputs aren't ready (e.g. a
@@ -64,16 +64,33 @@ See [ARCHITECTURE.md §1](./ARCHITECTURE.md#1-why-multiple-agents-not-a-single-l
 - Per-run sequence: [docs/sequence.md](./docs/sequence.md)
 - Agent state machine: [docs/agent_flow.md](./docs/agent_flow.md)
 
+## ClickUp ticket creation
+
+Ask in plain language and AgencyOS will create ClickUp tickets — after showing you the drafts and
+waiting for your **yes**:
+
+- *"Create a ticket to call the client Friday"* → one ad-hoc ticket.
+- *"Push all the tasks to ClickUp"* (after task generation ran) → one ticket per task.
+
+It talks to a **ClickUp MCP server** (`langchain-mcp-adapters` → `npx @taazkareem/clickup-mcp-server`,
+needs Node). Set these in `.env` (see `.env.example`):
+
+```bash
+CLICKUP_API_KEY=pk_...   # ClickUp → Settings → Apps → API Token
+CLICKUP_TEAM_ID=...      # the number in your app.clickup.com/<TEAM_ID>/ URL
+CLICKUP_LIST_ID=...      # the List new tickets go into (List → ⋯ → Copy ID)
+```
+
+Until those are set, the agent says ClickUp isn't connected instead of failing.
+
 ## Project status
 
-**Conversational orchestrator working end to end** (offline-tested, 38 tests passing):
-intent classification, ask-first prerequisite resolution, dynamic agent dispatch, clarification
-HITL, full-pipeline intent, and the CLI `chat` REPL — all on LangGraph interrupts + the Postgres
-checkpointer via the UI-agnostic `orchestrator.run_turn`.
+**Working end to end** (offline-tested, **87 tests passing**): real agent `act()` bodies (Groq
+structured output, Whisper transcription, Tavily search), intent classification, ask-first
+prerequisite resolution, dynamic dispatch, clarification + ClickUp HITL, the validator self-correction
+loop, a Next.js web UI + FastAPI layer (chat, Deliverables panel, file upload, DOCX/PDF download),
+and ClickUp ticket creation via MCP — all on LangGraph interrupts + the Postgres checkpointer via the
+UI-agnostic `orchestrator.drive_turn`.
 
-Agents currently return **deterministic placeholder outputs** so routing is fully testable without
-network. Next phase: implement the real `act()` bodies (Groq structured output, Whisper, Tavily,
-file packaging) and the Next.js web UI on top of `run_turn`.
-
-To run against live services, set `GROQ_API_KEY` + Neon `DATABASE_URL` in `.env`, then
-`uv run agencyos chat`.
+To run against live services, set `GROQ_API_KEY` + Neon `DATABASE_URL` (and optionally `TAVILY_API_KEY`
+/ ClickUp keys) in `.env`, then `uv run agencyos chat`.

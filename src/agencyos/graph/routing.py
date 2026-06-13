@@ -21,8 +21,14 @@ DEPENDENCIES: dict[str, list[str]] = {
     "risk": ["planning", "task_generation"],
     "proposal": ["requirement", "planning"],
     "validator": ["proposal"],
-    "executor": ["validator"],
+    # ClickUp ticket creation has no agent-output prerequisite: it works from a free-form request,
+    # and opportunistically from the generated tasks if they already exist.
+    "clickup": [],
 }
+
+# Agents that can act WITHOUT any meeting material (so the source-material gate must not refuse
+# them). ClickUp can create a ticket from a plain free-form instruction.
+MATERIAL_FREE_AGENTS: frozenset[str] = frozenset({"clickup"})
 
 # Canonical order for a full end-to-end run ("do everything" intent).
 FULL_PIPELINE: list[str] = [
@@ -33,7 +39,6 @@ FULL_PIPELINE: list[str] = [
     "risk",
     "proposal",
     "validator",
-    "executor",
 ]
 
 KNOWN_AGENTS: frozenset[str] = frozenset(DEPENDENCIES)
@@ -62,8 +67,6 @@ def _step_done(state: AgencyState, step: str) -> bool:
             return state.proposal is not None
         case "validator":
             return state.validation_report is not None and state.validation_report.approved
-        case "executor":
-            return state.run_summary is not None and state.run_summary.output_path is not None
         case _:
             return False
 
@@ -89,8 +92,6 @@ def reset_agent_output(state: AgencyState, agent: str) -> None:
         case "validator":
             state.validation_report = None
             state.attempt_count.pop("validation", None)
-        case "executor":
-            state.run_summary = None
 
 
 def missing_prerequisites(state: AgencyState, agent: str) -> list[str]:
@@ -141,11 +142,3 @@ def topological_order(agents: list[str]) -> list[str]:
     for a in requested:
         visit(a)
     return result
-
-
-def validator_router(state: AgencyState) -> str:
-    """After Validator runs: approve → executor, reject → back to manager for re-dispatch."""
-    vr = state.validation_report
-    if vr is not None and vr.approved:
-        return "executor"
-    return "manager"

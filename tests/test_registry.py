@@ -15,7 +15,7 @@ def test_registry_excludes_manager_includes_specialists():
         "risk",
         "proposal",
         "validator",
-        "executor",
+        "clickup",
     } == names
 
 

@@ -1,0 +1,45 @@
+You decide what ClickUp action the user's request maps to.
+
+User request:
+"{{ user_message }}"
+
+{% if existing_json and existing_json != "[]" -%}
+Tickets ALREADY created earlier in this conversation (JSON, most recent last):
+{{ existing_json }}
+{%- else -%}
+No ClickUp tickets have been created in this conversation yet.
+{%- endif %}
+
+{% if tasks_json and tasks_json != "[]" -%}
+The project also has these generated tasks (JSON):
+{{ tasks_json }}
+{%- else -%}
+The project has no generated tasks yet.
+{%- endif %}
+
+First set `action`:
+- `"update"` when the user refers to an EXISTING ticket above and wants to change it (e.g. "assign
+  this ticket to me", "set its due date", "make that one high priority", "rename it"). Put what they
+  pointed to in `target_ref` (a name fragment, or "this"/"it"/"last" if they just said "this ticket"),
+  and leave `tickets` empty. Do NOT create a new ticket for a change request.
+- `"create"` otherwise.
+
+Return a `ClickUpPlan`:
+- `tickets`: the ticket(s) to create. If the user wants the project's existing tasks pushed to
+  ClickUp ("create tickets for all the tasks", "push these to ClickUp"), return ONE ticket per task
+  (task title → `name`, task description → `description`, set `source_task_id` to the task id). If
+  the user describes a SPECIFIC ad-hoc ticket ("create a ticket to call the client Friday"), return
+  just that one ticket with a clear, concise `name`.
+- **Never invent a ticket title.** If the user asks to create a ticket but gives NO concrete subject
+  to title it from (e.g. "create a ticket", "make a ClickUp ticket but no details needed"), return
+  an EMPTY `tickets` list and set `needs_title: true`. Do NOT make up a placeholder like "Ad-hoc
+  task".
+- `needs_title`: true ONLY when the user wants a ticket but provided no subject to name it from.
+- `skip_questions`: true when the user has ALREADY settled the details — i.e. they explicitly say
+  they don't want a due date / priority / assignee ("no due date, priority or assignee", "just
+  create it", "no details needed"), OR they already stated the details they want in the message.
+  false when the user said nothing about due date / priority / assignee (so we should ask).
+- For each ticket, fill what the user explicitly gave: `priority` (ClickUp scale 1=Urgent, 2=High,
+  3=Normal, 4=Low; default 3 if unspecified), `due_date` (natural language as written, else null).
+  Leave `assignees` null here (assignee resolution happens later with the member list).
+- Never fabricate work, dates, or assignees the user didn't mention.

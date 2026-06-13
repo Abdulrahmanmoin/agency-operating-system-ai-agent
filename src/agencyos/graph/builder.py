@@ -20,6 +20,7 @@ from agencyos.agents import manager
 from agencyos.agents.registry import AGENTS, capabilities_text
 from agencyos.graph.routing import (
     FULL_PIPELINE,
+    MATERIAL_FREE_AGENTS,
     _step_done,
     reset_agent_output,
     topological_order,
@@ -83,7 +84,9 @@ def prerequisite_check_node(state: AgencyState) -> AgencyState:
     # Source-material gate: the specialists extract/plan/etc. FROM meeting data. With no notes,
     # no audio, and nothing already extracted there is nothing to work from, so refuse rather than
     # fabricate a generic result. Existing requirements count as proof material was provided.
-    wants_work = intent.full_pipeline or bool(intent.agents)
+    wants_work = intent.full_pipeline or any(
+        a not in MATERIAL_FREE_AGENTS for a in intent.agents
+    )
     has_material = bool(state.source_material() or state.audio_path or state.requirements)
     if wants_work and not has_material:
         state.audit_log.append(
@@ -180,7 +183,7 @@ def finalize_node(state: AgencyState) -> AgencyState:
 
     intent = state.intent
     if intent is not None and intent.full_pipeline:
-        scope = ["proposal", "validator", "executor"]  # headline outputs of a full run
+        scope = ["proposal", "validator"]  # headline outputs of a full run
     elif intent is not None and intent.agents:
         scope = intent.agents  # show what the user asked for (even if already present)
     else:

@@ -4,13 +4,18 @@
 
 ---
 
-## TODO — future work
+## Status notes (kept in sync with the code)
 
-- **Next.js frontend: per-artifact downloads.** Each agent's output (plan, proposal, requirements,
-  tasks, risks) should be individually **downloadable** from the web UI (e.g. `plan.json`,
-  `proposal.md`/`.pdf`), not only shown in chat. The shared state already carries every artifact;
-  this is a presentation feature built on `orchestrator.run_turn`. CLI behavior is unchanged
-  (the Executor writes files only on a full run or an explicit "save/package" request).
+- **Web UI + per-artifact downloads — DONE.** A Next.js chat UI + FastAPI layer sit on top of
+  `orchestrator.drive_turn`. Each agent's output (requirements, plan, tasks, risks, proposal,
+  ClickUp tickets) renders as a card in a **Deliverables** panel and is **downloadable as DOCX or
+  PDF**, generated on demand from shared state (`api/exporters.py`).
+- **ExecutorAgent — removed from the active pipeline (dormant).** Its only job was writing the
+  package to the *server's* disk, which a web user can't reach now that artifacts download on
+  demand. The full pipeline ends at the Validator. `agents/executor.py` + `tools/file_io.py` are
+  kept dormant so a server-side bundle / audit-log export can be re-added if needed.
+- **ClickUp integration — DONE (via MCP).** A `ClickUpAgent` creates tickets from the generated
+  tasks or a free-form request, gated by a human-in-the-loop confirmation. See §2.
 
 ---
 
@@ -27,7 +32,11 @@
 
 ---
 
-## 2. Agent roster (11 agents)
+## 2. Agent roster
+
+Manager (orchestrator) + 9 specialists: Transcription, Requirement Analysis, Clarification,
+Planning, Task Generation, Risk Analysis, Proposal, Validator, ClickUp. (The ExecutorAgent is
+documented below but is currently **deferred/dormant** — see the status note at the top.)
 
 Every agent declares **Role / Responsibility / Goal / Tools / Inputs / Outputs**.
 
@@ -106,13 +115,25 @@ Every agent declares **Role / Responsibility / Goal / Tools / Inputs / Outputs**
 - **Inputs:** Everything except risks (gets risks only at executive-summary level)
 - **Outputs:** `state.proposal: Proposal` (markdown sections, no files yet)
 
-### 📦 ExecutorAgent
-- **Role:** Packager
-- **Responsibility:** Write approved artifacts to disk, build deliverable bundle, log metrics, finalize conversation record
-- **Goal:** Produce a single `outputs/<conversation_id>/` folder containing every artifact + `run_summary.json`
-- **Tools:** `file_writer` (sandboxed to `outputs/`), `zip_packager`, `metrics_recorder`
-- **Inputs:** Validated `state`
-- **Outputs:** Filesystem artifacts + `state.run_summary`
+### 🎫 ClickUpAgent
+- **Role:** Delivery coordinator
+- **Responsibility:** Create ClickUp tickets from the generated tasks or a free-form user request
+- **Goal:** Get the agreed work into ClickUp as tickets, **only after the user confirms**
+- **Tools:** ClickUp **MCP server** (`tools/clickup_mcp.py` via `langchain-mcp-adapters` → stdio
+  subprocess `npx @taazkareem/clickup-mcp-server`), `structured_output_parser` (drafting)
+- **Inputs:** `state.last_user_message`, `state.tasks` (optional)
+- **Outputs:** `state.clickup_tickets: list[ClickUpTicket]`
+- **HITL flow:** Drafts the ticket(s) → emits a graph **interrupt** showing them → on user *yes*,
+  creates them through the MCP server; on *no*, creates nothing. No agent-output prerequisite, and
+  exempt from the source-material gate (a free-form ticket needs no meeting data). Not part of
+  `FULL_PIPELINE`, so an end-to-end run never silently creates tickets.
+
+### 📦 ExecutorAgent — *deferred / dormant*
+- **Status:** Removed from the active pipeline. Its job (write the package to the server's disk +
+  zip + `run_summary.json`) is redundant now that the web UI downloads each artifact on demand.
+  Implementation kept in `agents/executor.py` for easy re-add; the full pipeline ends at the Validator.
+- **Role (when active):** Packager — write approved artifacts to `outputs/<conversation_id>/`,
+  build a zip bundle, log metrics.
 
 ---
 
@@ -192,9 +213,10 @@ agents and only those agents run (in dependency order). Missing prerequisites tr
 ```
 
 Agents available to the dispatch loop: `transcription` (only if audio), `requirement`,
-`clarification`, `planning`, `task_generation`, `risk`, `proposal`, `validator`, `executor`.
-Their prerequisite edges live in `graph/routing.py::DEPENDENCIES`. The full end-to-end intent
-runs `routing.py::FULL_PIPELINE`.
+`clarification`, `planning`, `task_generation`, `risk`, `proposal`, `validator`, and `clickup`
+(on request). Their prerequisite edges live in `graph/routing.py::DEPENDENCIES`. The full
+end-to-end intent runs `routing.py::FULL_PIPELINE` (which ends at `validator`; `clickup` and the
+dormant `executor` are not part of it).
 
 State persists across turns via the **Postgres checkpointer** (thread_id = conversation_id),
 so the same backend serves the CLI today and the planned Next.js UI later — interrupts are
@@ -265,10 +287,9 @@ projects(id UUID PK, conversation_id UUID FK, status TEXT, output_path TEXT, run
 | `contradiction_detector` | Clarification | Local |
 | `dag_validator` | Task Gen | Local |
 | `calculator` | Risk | Local (safe eval) |
-| `file_writer` | Executor | Local FS (sandboxed) |
-| `zip_packager` | Executor | Local |
-| `hitl_prompt` | Clarification | Local (CLI) |
-| `metrics_recorder` | Executor | Local + Postgres |
+| `clickup_mcp` (create-task) | ClickUp | ✅ ClickUp **MCP server** (stdio via npx) |
+| `hitl_prompt` | Clarification, ClickUp | Local (graph interrupt) |
+| `file_writer` / `zip_packager` / `metrics_recorder` | Executor *(dormant)* | Local FS (sandboxed) |
 
 Each tool is a `@tool`-decorated LangChain tool. Agents receive only their allowed tools at graph build time.
 
@@ -301,7 +322,7 @@ src/agencyos/prompts/
 |---|---|---|---|
 | Tool | `@tenacity.retry` (exponential backoff) on external API calls | 3 | Raise to agent |
 | Agent | Pydantic validation retry: on parse failure, re-prompt with error injected | 2 | Mark step failed, propagate to Manager |
-| Graph | Validator-driven retry: bad output → Manager re-dispatches specialist with feedback | 3 cycles | `ExecutorAgent` emits partial package + `incidents.md` listing failures |
+| Graph | Validator-driven retry: bad output → re-dispatch the target specialist with feedback injected | 3 cycles | Exhausted → skip remaining work + escalate to the user with the validator's feedback |
 
 ---
 
@@ -319,7 +340,7 @@ src/agencyos/prompts/
 | Metric | How measured | Target |
 |---|---|---|
 | Time saved | Wall-clock per run vs. manual baseline | ≥ 90% reduction |
-| Automation rate | % of runs reaching Executor without HITL escalation | ≥ 70% |
+| Automation rate | % of runs reaching Validator approval without HITL escalation | ≥ 70% |
 | Quality | Validator score (1–10) across rubric dimensions | ≥ 8.0 avg |
 | Token cost | Groq tokens × $/M vs. estimated freelancer cost | Report ratio |
 | Clarification recall | % of seeded gaps caught by Clarification Agent | ≥ 90% (held-out benchmark) |
@@ -383,7 +404,8 @@ agencyos/
 2. **W2 — Transcription + Requirement + Clarification (HITL).** Audio path + text path; CLI pause/resume loop.
 3. **W3 — Planning + TaskGen + Risk.** Tavily wired, structured outputs.
 4. **W4 — Validator + retry loop + Proposal.**
-5. **W5 — Executor + LangGraph checkpointer + run summary.**
+5. **W5 — LangGraph Postgres checkpointer + run summary** (Executor packaging built here, later
+   deferred once web downloads replaced server-side bundling).
 6. **W6 — Benchmarks + Mermaid diagrams.** Measurable-results report.
-7. **W7 — Polish + multi-vertical briefs.**
-8. **W8 — Buffer / stretch (LangSmith, second integration, web UI prep).**
+7. **W7 — Next.js web UI + FastAPI layer** (chat, Deliverables panel, file upload, DOCX/PDF download).
+8. **W8 — ClickUp integration via MCP** (ticket creation with HITL confirmation) + polish.

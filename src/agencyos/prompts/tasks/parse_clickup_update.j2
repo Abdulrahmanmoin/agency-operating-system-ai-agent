@@ -1,0 +1,19 @@
+The user wants to update an existing ClickUp ticket:
+"{{ ticket_name }}"
+
+Their change request:
+"{{ user_message }}"
+
+Assignable workspace members (JSON; may be empty):
+{{ members_json }}
+
+Return a `ClickUpChange` with ONLY the fields the user explicitly asked to change — leave every
+other field null:
+- `name`: a new title, only if they asked to rename it.
+- `priority`: ClickUp scale 1=Urgent, 2=High, 3=Normal, 4=Low — only if they mentioned priority.
+- `due_date`: natural language as written (e.g. "18 June 2026", "next Friday") — only if mentioned.
+- `assignees`: the member **id**(s) for the people they named — match on username/email, case-
+  insensitive; "me"/"myself" → the single member's id when there is exactly one. Only ids that exist
+  in the member list. Null if no assignee was requested or none matched.
+
+Never invent members, dates, priorities, or a new name the user didn't ask for.

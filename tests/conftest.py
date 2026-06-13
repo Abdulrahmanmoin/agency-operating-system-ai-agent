@@ -16,6 +16,7 @@ os.environ.setdefault("OUTPUT_DIR", tempfile.mkdtemp(prefix="agencyos-test-out-"
 import pytest
 
 from agencyos.agents.clarification import GapAnalysis
+from agencyos.agents.clickup import ClickUpPlan
 from agencyos.agents.validator import ValidationDraft
 from agencyos.graph.state import (
     Milestone,
@@ -77,6 +78,8 @@ _STUB_OUTPUTS = {
     ),
     # Default: clarification finds no gaps, so the pipeline flows without interrupting.
     "agencyos.agents.clarification.get_chat_model": GapAnalysis(items=[]),
+    # Default: ClickUp drafts nothing, so unrelated tests never reach the MCP layer.
+    "agencyos.agents.clickup.get_chat_model": ClickUpPlan(tickets=[]),
 }
 
 

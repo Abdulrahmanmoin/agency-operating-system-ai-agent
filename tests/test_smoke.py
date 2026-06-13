@@ -47,6 +47,5 @@ def test_graph_builder_wires_all_agents() -> None:
         "risk",
         "proposal",
         "validator",
-        "executor",
     }
     assert expected.issubset(set(g.nodes.keys()))

@@ -128,8 +128,8 @@ async def test_full_pipeline_runs_everything(monkeypatch):
     assert "__interrupt__" not in out
     assert out["proposal"] is not None
     assert out["validation_report"] is not None
-    assert out["run_summary"] is not None
-    # transcription is skipped (no audio); the rest of the pipeline ran in order
+    # transcription is skipped (no audio); the rest of the pipeline ran in order and ends at the
+    # validator (the executor was removed — the web UI downloads each artifact on demand instead)
     assert out["scratch"]["executed"] == [
         "requirement",
         "clarification",
@@ -138,5 +138,4 @@ async def test_full_pipeline_runs_everything(monkeypatch):
         "risk",
         "proposal",
         "validator",
-        "executor",
     ]

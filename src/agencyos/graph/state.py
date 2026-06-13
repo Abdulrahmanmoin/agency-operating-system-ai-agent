@@ -103,6 +103,27 @@ class RiskList(_Payload):
     risks: list[Risk] | None = None
 
 
+class ClickUpTicketDraft(_Payload):
+    """A ticket the ClickUp agent proposes to create — shown to the user for confirmation
+    BEFORE anything is written to the real workspace."""
+
+    name: str
+    description: str = ""
+    priority: int = 3  # ClickUp scale: 1=Urgent, 2=High, 3=Normal, 4=Low
+    source_task_id: str | None = None  # the generated Task this came from, if any
+    due_date: str | None = None  # natural-language or unix-ms due date, gathered via HITL
+    assignees: list[str] | None = None  # ClickUp user ids to assign, resolved from the HITL answer
+
+
+class ClickUpTicket(BaseModel):
+    """A ticket actually created in ClickUp (the MCP server's response)."""
+
+    id: str | None = None
+    name: str = ""
+    url: str | None = None
+    list_id: str | None = None
+
+
 class Proposal(BaseModel):
     executive_summary: str
     scope: str
@@ -199,6 +220,7 @@ class AgencyState(BaseModel):
     risks: list[Risk] = Field(default_factory=list)
     proposal: Proposal | None = None
     validation_report: ValidationReport | None = None
+    clickup_tickets: list[ClickUpTicket] = Field(default_factory=list)
 
     # Conversation control (intent-driven, turn-based)
     last_user_message: str | None = None

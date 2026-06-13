@@ -50,7 +50,6 @@ _ARTIFACT_TITLES = {
     "risk": "Risk Analysis",
     "proposal": "Proposal",
     "validator": "Quality Review",
-    "executor": "Saved Package",
 }
 
 _log = logging.getLogger("agencyos.api")

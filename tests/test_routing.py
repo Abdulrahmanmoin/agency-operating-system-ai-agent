@@ -5,14 +5,12 @@ from agencyos.graph.routing import (
     FULL_PIPELINE,
     missing_prerequisites,
     topological_order,
-    validator_router,
 )
 from agencyos.graph.state import (
     AgencyState,
     Plan,
     Requirements,
     Task,
-    ValidationReport,
 )
 
 
@@ -82,20 +80,3 @@ def test_full_pipeline_is_topologically_valid():
         for dep in deps:
             if dep in ordered:
                 assert ordered.index(dep) < ordered.index(agent)
-
-
-# ─── validator_router ─────────────────────────────────────────────────
-
-
-def test_validator_router_approves_to_executor():
-    s = _state(validation_report=ValidationReport(approved=True, feedback="ok"))
-    assert validator_router(s) == "executor"
-
-
-def test_validator_router_rejects_to_manager():
-    s = _state(
-        validation_report=ValidationReport(
-            approved=False, feedback="fix tasks", target_agent="task_generation"
-        )
-    )
-    assert validator_router(s) == "manager"

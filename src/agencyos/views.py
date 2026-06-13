@@ -79,11 +79,6 @@ def _validator_md(state: AgencyState) -> str:
     return f"**Quality review** — {verdict}" + (f" ({scores})" if scores else "")
 
 
-def _executor_md(state: AgencyState) -> str:
-    path = state.run_summary.output_path if state.run_summary else None
-    return f"**Package saved** to `{path}`" if path else ""
-
-
 _RENDERERS = {
     "requirement": (_requirements_md, lambda s: s.requirements is not None),
     "planning": (_plan_md, lambda s: s.plan is not None),
@@ -92,8 +87,9 @@ _RENDERERS = {
     "proposal": (_proposal_md, lambda s: s.proposal is not None),
     "clarification": (_clarifications_md, lambda s: True),
     "validator": (_validator_md, lambda s: s.validation_report is not None),
-    "executor": (_executor_md, lambda s: s.run_summary is not None),
 }
+# NOTE: ClickUp tickets are intentionally NOT a Deliverables card — they live in ClickUp (and aren't
+# meaningful as a DOCX/PDF download). The "✅ Created N tickets" chat message is the confirmation.
 
 
 def summarize(state: AgencyState, agents: list[str]) -> str:

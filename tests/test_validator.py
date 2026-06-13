@@ -1,4 +1,4 @@
-"""Tests for the ValidatorAgent: rubric scoring, executor gating, and bounce-back loop."""
+"""Tests for the ValidatorAgent: rubric scoring, approval, and the bounce-back loop."""
 
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -65,19 +65,19 @@ async def test_act_no_proposal_returns_unapproved(monkeypatch):
 
 def test_merge_approved_leaves_queue():
     agent = ValidatorAgent()
-    state = AgencyState(user_id="u", dispatch_queue=["validator", "executor"])
+    state = AgencyState(user_id="u", dispatch_queue=["validator"])
     agent.merge(state, ValidationReport(approved=True, feedback="ok"))
-    assert state.dispatch_queue == ["validator", "executor"]
+    assert state.dispatch_queue == ["validator"]
     assert "_queue_overridden" not in state.scratch
 
 
 def test_merge_rejected_requeues_target_then_validator():
     agent = ValidatorAgent()
-    state = AgencyState(user_id="u", dispatch_queue=["validator", "executor"])
+    state = AgencyState(user_id="u", dispatch_queue=["validator"])
     agent.merge(
         state, ValidationReport(approved=False, feedback="plan gap", target_agent="planning")
     )
-    assert state.dispatch_queue == ["planning", "validator", "executor"]
+    assert state.dispatch_queue == ["planning", "validator"]
     assert state.scratch["_queue_overridden"] is True
     assert state.attempt_count["validation"] == 1
 
@@ -85,12 +85,12 @@ def test_merge_rejected_requeues_target_then_validator():
 def test_merge_rejected_exhausted_escalates():
     agent = ValidatorAgent()
     state = AgencyState(
-        user_id="u", dispatch_queue=["validator", "executor"], attempt_count={"validation": 3}
+        user_id="u", dispatch_queue=["validator"], attempt_count={"validation": 3}
     )
     agent.merge(
         state, ValidationReport(approved=False, feedback="still broken", target_agent="planning")
     )
-    assert state.dispatch_queue == []  # executor skipped
+    assert state.dispatch_queue == []  # remaining work skipped
     assert state.scratch["_queue_overridden"] is True
     assert "didn't pass quality validation" in state.last_assistant_message
 
@@ -135,7 +135,7 @@ class _SeqModel:
         return result
 
 
-async def test_bounce_back_then_execute(monkeypatch):
+async def test_bounce_back_then_approve(monkeypatch):
     # validator rejects (→ proposal) on first pass, approves on second
     seq = _SeqModel(
         [
@@ -146,7 +146,7 @@ async def test_bounce_back_then_execute(monkeypatch):
     monkeypatch.setattr("agencyos.agents.validator.get_chat_model", lambda *a, **k: seq)
 
     async def fake_classify(self, state):  # noqa: ANN001
-        return Intent(agents=["validator", "executor"], full_pipeline=False)
+        return Intent(agents=["validator"], full_pipeline=False)
 
     monkeypatch.setattr("agencyos.agents.manager.ManagerAgent.classify_intent", fake_classify)
 
@@ -157,7 +157,7 @@ async def test_bounce_back_then_execute(monkeypatch):
         plan=Plan(summary="s", phases=[Milestone(name="P1", description="d")]),
         tasks=[Task(id="T1", title="t", description="d", priority=1, milestone="P1")],
         proposal=Proposal(executive_summary="x", scope="s", timeline="t", pricing="p", next_steps="n"),
-        last_user_message="validate and ship it",
+        last_user_message="validate it",
     )
     out = await app.ainvoke(state, {"configurable": {"thread_id": "t-bounce"}})
 
@@ -165,5 +165,4 @@ async def test_bounce_back_then_execute(monkeypatch):
     executed = out["scratch"]["executed"]
     assert executed.count("validator") == 2  # ran, bounced, ran again
     assert "proposal" in executed  # re-ran the target
-    assert executed[-1] == "executor"  # gate opened, executor ran last
-    assert out["run_summary"] is not None
+    assert executed[-1] == "validator"  # ends at the validator once approved

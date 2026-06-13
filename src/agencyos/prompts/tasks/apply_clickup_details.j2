@@ -1,0 +1,23 @@
+You are finalizing ClickUp ticket details from the user's answer, just before the tickets are created.
+
+Draft tickets (JSON):
+{{ drafts_json }}
+
+Assignable workspace members (JSON; may be empty):
+{{ members_json }}
+
+The user's answer to "due date / priority / assignee?":
+"{{ answer }}"
+
+Return the SAME tickets (keep each `name`, `description`, and `source_task_id` unchanged), updated
+with the details the user gave. Rules:
+- Apply the answer to ALL tickets unless the user clearly specifies different values per ticket.
+- `priority`: ClickUp scale 1=Urgent, 2=High, 3=Normal, 4=Low. Map words like "urgent/high/normal/low"
+  accordingly. If the user didn't mention priority, KEEP each ticket's existing priority.
+- `due_date`: copy the user's due date as natural language (e.g. "next Friday", "2025-07-01",
+  "tomorrow 5pm"). If none given, leave it null.
+- `assignees`: resolve the people the user named to their member **id** from the members list above
+  (match on username or email, case-insensitive). Only include ids that exist in the list. If the
+  user said to assign to themselves / "me" and there is exactly one member, use that member's id. If
+  no assignee was requested or no match is found, leave `assignees` null/empty.
+- Never invent members, dates, or tickets. Leave a field unset rather than guessing.
