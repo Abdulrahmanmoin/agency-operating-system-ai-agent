@@ -9,7 +9,11 @@ single reused connection via orchestrator.open_session.
 import asyncio
 import logging
 import sys
+from pathlib import Path
 from uuid import uuid4
+
+# Modules live flat under src/ — make it the import root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 # psycopg async needs the selector loop on Windows.
 if sys.platform == "win32":
@@ -18,7 +22,7 @@ if sys.platform == "win32":
 # Quiet the noisy library/info logs so the turn output is readable.
 logging.disable(logging.INFO)
 
-from agencyos.orchestrator import open_session  # noqa: E402
+from orchestrator import open_session  # noqa: E402
 
 NOTES = "sample_data/meeting_brightbrew.txt"
 

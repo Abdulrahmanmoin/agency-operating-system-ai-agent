@@ -1,6 +1,6 @@
 """Tests for the agent registry + capabilities menu (no LLM, no DB)."""
 
-from agencyos.agents.registry import AGENTS, capabilities, capabilities_text
+from agents.registry import AGENTS, capabilities, capabilities_text
 
 
 def test_registry_excludes_manager_includes_specialists():

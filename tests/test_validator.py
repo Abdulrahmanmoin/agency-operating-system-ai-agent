@@ -2,9 +2,9 @@
 
 from langgraph.checkpoint.memory import MemorySaver
 
-from agencyos.agents.validator import ValidationDraft, ValidatorAgent
-from agencyos.graph.builder import build_graph
-from agencyos.graph.state import (
+from agents.validator import ValidationDraft, ValidatorAgent
+from graph.builder import build_graph
+from graph.state import (
     AgencyState,
     Intent,
     Milestone,
@@ -39,7 +39,7 @@ async def test_act_maps_draft_to_report(monkeypatch):
     draft = ValidationDraft(
         approved=False, consistency=5, completeness=6, clarity=4, feedback="weak", target_agent="proposal"
     )
-    monkeypatch.setattr("agencyos.agents.validator.get_chat_model", lambda *a, **k: _FakeModel(draft))
+    monkeypatch.setattr("agents.validator.get_chat_model", lambda *a, **k: _FakeModel(draft))
 
     agent = ValidatorAgent()
     state = AgencyState(user_id="u", proposal=Proposal(executive_summary="x", scope="", timeline="", pricing="", next_steps=""))
@@ -53,7 +53,7 @@ async def test_act_no_proposal_returns_unapproved(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("LLM should not be called without a proposal")
 
-    monkeypatch.setattr("agencyos.agents.validator.get_chat_model", _boom)
+    monkeypatch.setattr("agents.validator.get_chat_model", _boom)
     agent = ValidatorAgent()
     report = await agent.act(AgencyState(user_id="u", plan=Plan(summary="s")), reasoning="r")
     assert report.approved is False
@@ -99,8 +99,8 @@ def test_merge_rejected_exhausted_escalates():
 
 
 def test_revision_note_only_when_targeted():
-    from agencyos.agents.proposal import ProposalAgent
-    from agencyos.agents.planning import PlanningAgent
+    from agents.proposal import ProposalAgent
+    from agents.planning import PlanningAgent
 
     proposal = ProposalAgent()
     planning = PlanningAgent()
@@ -143,12 +143,12 @@ async def test_bounce_back_then_approve(monkeypatch):
             ValidationDraft(approved=True, consistency=9, completeness=9, clarity=9, feedback="great"),
         ]
     )
-    monkeypatch.setattr("agencyos.agents.validator.get_chat_model", lambda *a, **k: seq)
+    monkeypatch.setattr("agents.validator.get_chat_model", lambda *a, **k: seq)
 
     async def fake_classify(self, state):  # noqa: ANN001
         return Intent(agents=["validator"], full_pipeline=False)
 
-    monkeypatch.setattr("agencyos.agents.manager.ManagerAgent.classify_intent", fake_classify)
+    monkeypatch.setattr("agents.manager.ManagerAgent.classify_intent", fake_classify)
 
     app = build_graph().compile(checkpointer=MemorySaver())
     state = AgencyState(

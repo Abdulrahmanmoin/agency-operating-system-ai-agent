@@ -1,4 +1,4 @@
-"""Test bootstrap: provide stub env vars so `agencyos.config.Settings` loads without real secrets.
+"""Test bootstrap: provide stub env vars so `config.Settings` loads without real secrets.
 
 These are set before any `agencyos` import so module-level `settings = Settings()` succeeds.
 Real values come from `.env` in normal runs; tests never touch external services.
@@ -15,10 +15,10 @@ os.environ.setdefault("OUTPUT_DIR", tempfile.mkdtemp(prefix="agencyos-test-out-"
 
 import pytest
 
-from agencyos.agents.clarification import GapAnalysis
-from agencyos.agents.clickup import ClickUpPlan
-from agencyos.agents.validator import ValidationDraft
-from agencyos.graph.state import (
+from agents.clarification import GapAnalysis
+from agents.clickup import ClickUpPlan
+from agents.validator import ValidationDraft
+from graph.state import (
     Milestone,
     Plan,
     Proposal,
@@ -47,16 +47,16 @@ def _fake_model_returning(result):
 
 # Canned outputs per real-LLM agent, so the full suite stays offline.
 _STUB_OUTPUTS = {
-    "agencyos.agents.requirement.get_chat_model": Requirements(
+    "agents.requirement.get_chat_model": Requirements(
         client_goals=["(stub goal)"], services=["(stub service)"]
     ),
-    "agencyos.agents.planning.get_chat_model": Plan(
+    "agents.planning.get_chat_model": Plan(
         summary="(stub plan)", phases=[Milestone(name="Phase 1", description="(stub)")]
     ),
-    "agencyos.agents.task_generation.get_chat_model": TaskList(
+    "agents.task_generation.get_chat_model": TaskList(
         tasks=[Task(id="T1", title="(stub task)", description="(stub)", priority=1, milestone="Phase 1")]
     ),
-    "agencyos.agents.risk.get_chat_model": RiskList(
+    "agents.risk.get_chat_model": RiskList(
         risks=[
             Risk(
                 title="(stub risk)",
@@ -66,20 +66,20 @@ _STUB_OUTPUTS = {
             )
         ]
     ),
-    "agencyos.agents.proposal.get_chat_model": Proposal(
+    "agents.proposal.get_chat_model": Proposal(
         executive_summary="(stub summary)",
         scope="(stub scope)",
         timeline="(stub timeline)",
         pricing="(stub pricing)",
         next_steps="(stub next steps)",
     ),
-    "agencyos.agents.validator.get_chat_model": ValidationDraft(
+    "agents.validator.get_chat_model": ValidationDraft(
         approved=True, consistency=9.0, completeness=9.0, clarity=9.0, feedback="ok"
     ),
     # Default: clarification finds no gaps, so the pipeline flows without interrupting.
-    "agencyos.agents.clarification.get_chat_model": GapAnalysis(items=[]),
+    "agents.clarification.get_chat_model": GapAnalysis(items=[]),
     # Default: ClickUp drafts nothing, so unrelated tests never reach the MCP layer.
-    "agencyos.agents.clickup.get_chat_model": ClickUpPlan(tickets=[]),
+    "agents.clickup.get_chat_model": ClickUpPlan(tickets=[]),
 }
 
 

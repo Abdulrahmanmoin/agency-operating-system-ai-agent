@@ -1,14 +1,19 @@
 """Alembic environment — reads DATABASE_URL_SYNC from the app settings and discovers SQLModel metadata."""
 
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
-from alembic import context
-from sqlalchemy import engine_from_config, pool
-from sqlmodel import SQLModel
+# Modules live flat under src/ — make it the import root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from alembic import context  # noqa: E402
+from sqlalchemy import engine_from_config, pool  # noqa: E402
+from sqlmodel import SQLModel  # noqa: E402
 
 # Import models so SQLModel.metadata is populated.
-from agencyos.config import settings
-from agencyos.memory import models  # noqa: F401
+from config import settings  # noqa: E402
+from memory import models  # noqa: F401, E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url_sync)

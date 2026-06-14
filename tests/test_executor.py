@@ -3,8 +3,8 @@
 import json
 import zipfile
 
-from agencyos.agents.executor import ExecutorAgent
-from agencyos.graph.state import (
+from agents.executor import ExecutorAgent
+from graph.state import (
     AgencyState,
     AuditEntry,
     AuditPhase,
@@ -43,7 +43,7 @@ def _full_state() -> AgencyState:
 
 
 async def test_executor_writes_all_artifacts(monkeypatch, tmp_path):
-    monkeypatch.setattr("agencyos.config.settings.output_dir", tmp_path)
+    monkeypatch.setattr("config.settings.output_dir", tmp_path)
 
     agent = ExecutorAgent()
     state = _full_state()
@@ -85,7 +85,7 @@ async def test_executor_writes_all_artifacts(monkeypatch, tmp_path):
 
 
 async def test_executor_skips_absent_artifacts(monkeypatch, tmp_path):
-    monkeypatch.setattr("agencyos.config.settings.output_dir", tmp_path)
+    monkeypatch.setattr("config.settings.output_dir", tmp_path)
 
     agent = ExecutorAgent()
     state = AgencyState(user_id="u")  # nothing produced

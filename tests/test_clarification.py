@@ -3,9 +3,9 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from agencyos.agents.clarification import ClarificationAgent, GapAnalysis, GapItem
-from agencyos.graph.builder import build_graph
-from agencyos.graph.state import AgencyState, ClarificationSeverity, Intent, Requirements
+from agents.clarification import ClarificationAgent, GapAnalysis, GapItem
+from graph.builder import build_graph
+from graph.state import AgencyState, ClarificationSeverity, Intent, Requirements
 
 
 class _Model:
@@ -40,7 +40,7 @@ def _patch_intent(monkeypatch, intent: Intent) -> None:
     async def fake_classify(self, state):  # noqa: ANN001
         return Intent(**intent.model_dump())
 
-    monkeypatch.setattr("agencyos.agents.manager.ManagerAgent.classify_intent", fake_classify)
+    monkeypatch.setattr("agents.manager.ManagerAgent.classify_intent", fake_classify)
 
 
 # ─── unit: detection without interrupts ───────────────────────────────
@@ -48,7 +48,7 @@ def _patch_intent(monkeypatch, intent: Intent) -> None:
 
 async def test_no_gaps_returns_empty(monkeypatch):
     monkeypatch.setattr(
-        "agencyos.agents.clarification.get_chat_model", lambda *a, **k: _Model(GapAnalysis(items=[]))
+        "agents.clarification.get_chat_model", lambda *a, **k: _Model(GapAnalysis(items=[]))
     )
     agent = ClarificationAgent()
     reqs = Requirements(client_goals=["g"], target_audience="SMBs")
@@ -61,7 +61,7 @@ async def test_noncritical_gap_does_not_interrupt(monkeypatch):
     gaps = GapAnalysis(
         items=[GapItem(field="services", issue="a bit vague", severity="major", question="Which channels?")]
     )
-    monkeypatch.setattr("agencyos.agents.clarification.get_chat_model", lambda *a, **k: _Model(gaps))
+    monkeypatch.setattr("agents.clarification.get_chat_model", lambda *a, **k: _Model(gaps))
     agent = ClarificationAgent()
     reqs = Requirements(client_goals=["g"])
     out = await agent.act(AgencyState(user_id="u", requirements=reqs), reasoning="r")
@@ -86,7 +86,7 @@ async def test_clarification_hitl_via_graph(monkeypatch):
     )
     updated = Requirements(client_goals=["g"], target_audience="enterprise buyers")
     monkeypatch.setattr(
-        "agencyos.agents.clarification.get_chat_model",
+        "agents.clarification.get_chat_model",
         lambda *a, **k: _SchemaModel({GapAnalysis: gaps, Requirements: updated}),
     )
     _patch_intent(monkeypatch, Intent(agents=["clarification"]))

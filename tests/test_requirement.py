@@ -1,8 +1,8 @@
 """Tests for the document loader + RequirementAnalysisAgent (LLM mocked, no network)."""
 
-from agencyos.agents.requirement import RequirementAnalysisAgent
-from agencyos.graph.state import AgencyState, Requirements
-from agencyos.tools.document_loader import load_document
+from agents.requirement import RequirementAnalysisAgent
+from graph.state import AgencyState, Requirements
+from tools.document_loader import load_document
 
 
 # ─── document loader ──────────────────────────────────────────────────
@@ -62,7 +62,7 @@ def _patch_model(monkeypatch, result, holder=None):
     model = _FakeModel(result)
     if holder is not None:
         holder["model"] = model
-    monkeypatch.setattr("agencyos.agents.requirement.get_chat_model", lambda *a, **k: model)
+    monkeypatch.setattr("agents.requirement.get_chat_model", lambda *a, **k: model)
 
 
 async def test_requirement_extracts_via_llm(monkeypatch):
@@ -91,7 +91,7 @@ async def test_requirement_empty_source_skips_llm(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("LLM should not be called when there is no source material")
 
-    monkeypatch.setattr("agencyos.agents.requirement.get_chat_model", _boom)
+    monkeypatch.setattr("agents.requirement.get_chat_model", _boom)
 
     agent = RequirementAnalysisAgent()
     out = await agent.act(AgencyState(user_id="u"), reasoning="r")

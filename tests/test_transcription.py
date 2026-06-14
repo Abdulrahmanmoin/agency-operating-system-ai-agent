@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from agencyos.agents.transcription import TranscriptionAgent
-from agencyos.graph.state import AgencyState, TranscriptMeta
+from agents.transcription import TranscriptionAgent
+from graph.state import AgencyState, TranscriptMeta
 
 
 async def test_agent_transcribes_audio(monkeypatch):
@@ -15,7 +15,7 @@ async def test_agent_transcribes_audio(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "agencyos.tools.transcription.groq_whisper_transcribe", fake_transcribe
+        "tools.transcription.groq_whisper_transcribe", fake_transcribe
     )
 
     agent = TranscriptionAgent()
@@ -60,7 +60,7 @@ async def test_tool_maps_groq_response(monkeypatch, tmp_path):
 
     monkeypatch.setattr("groq.AsyncGroq", _FakeGroq)
 
-    from agencyos.tools.transcription import groq_whisper_transcribe
+    from tools.transcription import groq_whisper_transcribe
 
     result = await groq_whisper_transcribe(audio)
     assert result["transcript"] == "transcribed text"

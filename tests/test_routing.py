@@ -1,12 +1,12 @@
 """Pure unit tests for the dependency/routing model (no LLM, no DB)."""
 
-from agencyos.graph.routing import (
+from graph.routing import (
     DEPENDENCIES,
     FULL_PIPELINE,
     missing_prerequisites,
     topological_order,
 )
-from agencyos.graph.state import (
+from graph.state import (
     AgencyState,
     Plan,
     Requirements,

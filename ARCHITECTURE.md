@@ -298,7 +298,7 @@ Each tool is a `@tool`-decorated LangChain tool. Agents receive only their allow
 ## 8. Reusable prompt system
 
 ```
-src/agencyos/prompts/
+src/prompts/
 ├── system/              # one .j2 per agent role
 │   ├── manager.j2
 │   ├── requirement.j2
@@ -366,8 +366,7 @@ agencyos/
 │   ├── sequence.md              # mermaid: per-run sequence
 │   ├── agent_flow.md            # mermaid: routing
 │   └── state_machine.md         # mermaid: state transitions
-├── src/agencyos/
-│   ├── __init__.py
+├── src/                        # flat layout — modules are the import root
 │   ├── main.py                  # CLI entry
 │   ├── config.py                # pydantic-settings
 │   ├── llm/                     # Groq client wrapper

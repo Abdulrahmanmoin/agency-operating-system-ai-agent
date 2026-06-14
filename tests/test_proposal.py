@@ -1,7 +1,7 @@
 """Tests for the ProposalAgent (LLM mocked, no network)."""
 
-from agencyos.agents.proposal import ProposalAgent
-from agencyos.graph.state import (
+from agents.proposal import ProposalAgent
+from graph.state import (
     AgencyState,
     Milestone,
     Plan,
@@ -35,7 +35,7 @@ def _patch_model(monkeypatch, result, holder=None):
     model = _FakeModel(result)
     if holder is not None:
         holder["model"] = model
-    monkeypatch.setattr("agencyos.agents.proposal.get_chat_model", lambda *a, **k: model)
+    monkeypatch.setattr("agents.proposal.get_chat_model", lambda *a, **k: model)
 
 
 async def test_proposal_synthesizes_all_inputs(monkeypatch):
@@ -72,7 +72,7 @@ async def test_proposal_without_inputs_is_safe(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("LLM should not be called without requirements or plan")
 
-    monkeypatch.setattr("agencyos.agents.proposal.get_chat_model", _boom)
+    monkeypatch.setattr("agents.proposal.get_chat_model", _boom)
 
     agent = ProposalAgent()
     out = await agent.act(AgencyState(user_id="u"), reasoning="r")

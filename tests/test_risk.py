@@ -1,7 +1,7 @@
 """Tests for the RiskAnalysisAgent + Tavily integration (LLM and web search mocked)."""
 
-from agencyos.agents.risk import RiskAnalysisAgent
-from agencyos.graph.state import (
+from agents.risk import RiskAnalysisAgent
+from graph.state import (
     AgencyState,
     AuditPhase,
     Milestone,
@@ -35,7 +35,7 @@ def _patch_model(monkeypatch, result, holder=None):
     model = _FakeModel(result)
     if holder is not None:
         holder["model"] = model
-    monkeypatch.setattr("agencyos.agents.risk.get_chat_model", lambda *a, **k: model)
+    monkeypatch.setattr("agents.risk.get_chat_model", lambda *a, **k: model)
 
 
 def _state_with_plan(**extra) -> AgencyState:
@@ -49,7 +49,7 @@ def _state_with_plan(**extra) -> AgencyState:
 
 async def test_risk_runs_without_tavily_when_no_key(monkeypatch):
     # No TAVILY_API_KEY in tests → web context skipped, but risk analysis still runs.
-    monkeypatch.setattr("agencyos.config.settings.tavily_api_key", None, raising=False)
+    monkeypatch.setattr("config.settings.tavily_api_key", None, raising=False)
     result = RiskList(risks=[Risk(title="Deadline", description="tight", severity=RiskSeverity.HIGH, mitigation="buffer")])
     holder: dict = {}
     _patch_model(monkeypatch, result, holder)
@@ -66,7 +66,7 @@ async def test_risk_runs_without_tavily_when_no_key(monkeypatch):
 
 
 async def test_risk_uses_tavily_when_configured(monkeypatch):
-    monkeypatch.setattr("agencyos.config.settings.tavily_api_key", "tvly-test", raising=False)
+    monkeypatch.setattr("config.settings.tavily_api_key", "tvly-test", raising=False)
 
     async def fake_search(query, max_results=5, include_answer=True):  # noqa: ANN001
         return {
@@ -75,7 +75,7 @@ async def test_risk_uses_tavily_when_configured(monkeypatch):
             "results": [{"title": "Benchmark", "url": "http://x", "content": "details", "score": 0.9}],
         }
 
-    monkeypatch.setattr("agencyos.tools.web_search.tavily_search", fake_search)
+    monkeypatch.setattr("tools.web_search.tavily_search", fake_search)
     holder: dict = {}
     _patch_model(monkeypatch, RiskList(risks=[]), holder)
 
@@ -90,12 +90,12 @@ async def test_risk_uses_tavily_when_configured(monkeypatch):
 
 
 async def test_risk_tavily_failure_degrades_gracefully(monkeypatch):
-    monkeypatch.setattr("agencyos.config.settings.tavily_api_key", "tvly-test", raising=False)
+    monkeypatch.setattr("config.settings.tavily_api_key", "tvly-test", raising=False)
 
     async def boom_search(*a, **k):
         raise RuntimeError("tavily down")
 
-    monkeypatch.setattr("agencyos.tools.web_search.tavily_search", boom_search)
+    monkeypatch.setattr("tools.web_search.tavily_search", boom_search)
     holder: dict = {}
     _patch_model(monkeypatch, RiskList(risks=[]), holder)
 
@@ -111,7 +111,7 @@ async def test_risk_no_plan_or_tasks_is_safe(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("LLM should not be called with no plan and no tasks")
 
-    monkeypatch.setattr("agencyos.agents.risk.get_chat_model", _boom)
+    monkeypatch.setattr("agents.risk.get_chat_model", _boom)
 
     agent = RiskAnalysisAgent()
     out = await agent.act(AgencyState(user_id="u"), reasoning="r")

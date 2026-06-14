@@ -2,8 +2,8 @@
 
 import pytest
 
-from agencyos.agents.manager import ManagerAgent
-from agencyos.graph.state import AgencyState, Intent, Requirements, Plan
+from agents.manager import ManagerAgent
+from graph.state import AgencyState, Intent, Requirements, Plan
 
 
 class _FakeStructured:
@@ -24,7 +24,7 @@ class _FakeModel:
 
 def _patch_model(monkeypatch, intent: Intent) -> None:
     monkeypatch.setattr(
-        "agencyos.agents.manager.get_chat_model",
+        "agents.manager.get_chat_model",
         lambda *a, **k: _FakeModel(intent),
     )
 

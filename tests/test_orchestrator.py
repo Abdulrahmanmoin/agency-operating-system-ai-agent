@@ -4,9 +4,9 @@ from uuid import uuid4
 
 from langgraph.checkpoint.memory import MemorySaver
 
-from agencyos.graph.builder import build_graph
-from agencyos.graph.state import AgencyState, Intent
-from agencyos.orchestrator import drive_turn
+from graph.builder import build_graph
+from graph.state import AgencyState, Intent
+from orchestrator import drive_turn
 
 
 def _app():
@@ -19,7 +19,7 @@ def _patch_intent(monkeypatch, intent: Intent) -> None:
         i.agents = list(intent.agents)
         return i
 
-    monkeypatch.setattr("agencyos.agents.manager.ManagerAgent.classify_intent", fake_classify)
+    monkeypatch.setattr("agents.manager.ManagerAgent.classify_intent", fake_classify)
 
 
 async def test_first_taskless_turn_returns_capabilities_message():

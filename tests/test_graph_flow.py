@@ -3,8 +3,8 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from agencyos.graph.builder import build_graph
-from agencyos.graph.state import AgencyState, Intent
+from graph.builder import build_graph
+from graph.state import AgencyState, Intent
 
 
 def _compile():
@@ -18,7 +18,7 @@ def _patch_intent(monkeypatch, intent: Intent) -> None:
         return i
 
     monkeypatch.setattr(
-        "agencyos.agents.manager.ManagerAgent.classify_intent", fake_classify
+        "agents.manager.ManagerAgent.classify_intent", fake_classify
     )
 
 
@@ -84,7 +84,7 @@ async def test_unmappable_request_asks_to_rephrase(monkeypatch):
 
 
 async def test_regenerate_reruns_existing_agent(monkeypatch):
-    from agencyos.graph.state import Milestone, Plan, Requirements
+    from graph.state import Milestone, Plan, Requirements
 
     _patch_intent(monkeypatch, Intent(agents=["planning"], regenerate=True))
     app = _compile()
@@ -102,7 +102,7 @@ async def test_regenerate_reruns_existing_agent(monkeypatch):
 
 
 async def test_no_regenerate_reuses_cached_output(monkeypatch):
-    from agencyos.graph.state import Milestone, Plan, Requirements
+    from graph.state import Milestone, Plan, Requirements
 
     _patch_intent(monkeypatch, Intent(agents=["planning"], regenerate=False))
     app = _compile()

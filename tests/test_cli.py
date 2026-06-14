@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 
 from typer.testing import CliRunner
 
-from agencyos.cli.app import app
-from agencyos.orchestrator import TurnResult
+from cli.app import app
+from orchestrator import TurnResult
 
 runner = CliRunner()
 
@@ -33,7 +33,7 @@ def test_chat_loop_offers_capabilities_then_handles_input(monkeypatch):
             return TurnResult(kind="message", message="CAPABILITIES MENU")
         return TurnResult(kind="message", message=f"ran something for: {user_message}")
 
-    monkeypatch.setattr("agencyos.cli.app.open_session", _fake_session(turn))
+    monkeypatch.setattr("cli.app.open_session", _fake_session(turn))
 
     result = runner.invoke(app, ["chat", "--user", "me"], input="extract requirements\nexit\n")
     assert result.exit_code == 0
@@ -53,7 +53,7 @@ def test_chat_loop_renders_awaiting_question(monkeypatch):
             )
         return TurnResult(kind="message", message="all done")
 
-    monkeypatch.setattr("agencyos.cli.app.open_session", _fake_session(turn))
+    monkeypatch.setattr("cli.app.open_session", _fake_session(turn))
 
     result = runner.invoke(app, ["chat"], input="draft a proposal\nyes\nexit\n")
     assert result.exit_code == 0

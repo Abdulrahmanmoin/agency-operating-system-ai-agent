@@ -11,6 +11,10 @@ selector policy we set below.
 
 import asyncio
 import sys
+from pathlib import Path
+
+# Modules live flat under src/ — make it the import root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -20,7 +24,7 @@ import uvicorn  # noqa: E402
 
 def main() -> None:
     config = uvicorn.Config(
-        "agencyos.api.app:app",
+        "api.app:app",
         host="127.0.0.1",
         port=8000,
         log_level="info",

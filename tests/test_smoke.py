@@ -4,13 +4,12 @@ import pytest
 
 
 def test_package_imports() -> None:
-    import agencyos
-
-    assert agencyos.__version__
+    import config  # noqa: F401
+    import orchestrator  # noqa: F401
 
 
 def test_state_schema_constructs() -> None:
-    from agencyos.graph.state import AgencyState
+    from graph.state import AgencyState
 
     s = AgencyState(user_id="tester")
     assert s.conversation_id
@@ -19,7 +18,7 @@ def test_state_schema_constructs() -> None:
 
 
 def test_calculator_safe_eval() -> None:
-    from agencyos.tools.calculator import safe_eval
+    from tools.calculator import safe_eval
 
     assert safe_eval("2 + 3 * 4") == 14.0
     with pytest.raises(ValueError):
@@ -29,7 +28,7 @@ def test_calculator_safe_eval() -> None:
 def test_graph_builder_wires_all_agents() -> None:
     pytest.importorskip("langgraph")
     pytest.importorskip("langchain_groq")
-    from agencyos.graph.builder import build_graph
+    from graph.builder import build_graph
 
     g = build_graph()
     expected = {

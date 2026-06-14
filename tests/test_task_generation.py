@@ -1,7 +1,7 @@
 """Tests for the TaskGenerationAgent (LLM mocked, no network)."""
 
-from agencyos.agents.task_generation import TaskGenerationAgent
-from agencyos.graph.state import AgencyState, Milestone, Plan, Task, TaskList
+from agents.task_generation import TaskGenerationAgent
+from graph.state import AgencyState, Milestone, Plan, Task, TaskList
 
 
 class _FakeStructured:
@@ -26,7 +26,7 @@ def _patch_model(monkeypatch, result, holder=None):
     model = _FakeModel(result)
     if holder is not None:
         holder["model"] = model
-    monkeypatch.setattr("agencyos.agents.task_generation.get_chat_model", lambda *a, **k: model)
+    monkeypatch.setattr("agents.task_generation.get_chat_model", lambda *a, **k: model)
 
 
 async def test_generates_tasks_from_plan(monkeypatch):
@@ -59,7 +59,7 @@ async def test_no_plan_is_safe(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("LLM should not be called without a plan")
 
-    monkeypatch.setattr("agencyos.agents.task_generation.get_chat_model", _boom)
+    monkeypatch.setattr("agents.task_generation.get_chat_model", _boom)
 
     agent = TaskGenerationAgent()
     out = await agent.act(AgencyState(user_id="u"), reasoning="r")

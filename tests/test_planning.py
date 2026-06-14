@@ -1,7 +1,7 @@
 """Tests for the PlanningAgent (LLM mocked, no network)."""
 
-from agencyos.agents.planning import PlanningAgent
-from agencyos.graph.state import AgencyState, Milestone, Plan, Requirements
+from agents.planning import PlanningAgent
+from graph.state import AgencyState, Milestone, Plan, Requirements
 
 
 class _FakeStructured:
@@ -26,7 +26,7 @@ def _patch_model(monkeypatch, result, holder=None):
     model = _FakeModel(result)
     if holder is not None:
         holder["model"] = model
-    monkeypatch.setattr("agencyos.agents.planning.get_chat_model", lambda *a, **k: model)
+    monkeypatch.setattr("agents.planning.get_chat_model", lambda *a, **k: model)
 
 
 async def test_planning_builds_plan_from_requirements(monkeypatch):
@@ -59,7 +59,7 @@ async def test_planning_without_requirements_is_safe(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("LLM should not be called without requirements")
 
-    monkeypatch.setattr("agencyos.agents.planning.get_chat_model", _boom)
+    monkeypatch.setattr("agents.planning.get_chat_model", _boom)
 
     agent = PlanningAgent()
     out = await agent.act(AgencyState(user_id="u"), reasoning="r")

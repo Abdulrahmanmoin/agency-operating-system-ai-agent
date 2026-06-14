@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.scripts]
-agencyos = "agencyos:main"
+agencyos = "main:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -45,9 +45,13 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["src"]
 
+# Flat layout: modules live directly under src/ (no package dir). Strip the
+# src/ prefix so they install at the wheel root.
 [tool.hatch.build.targets.wheel]
-packages = ["src/agencyos"]
+only-include = ["src"]
+sources = ["src"]
 
 [dependency-groups]
 dev = [

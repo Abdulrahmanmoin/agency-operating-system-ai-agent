@@ -4,7 +4,7 @@ it while idle (auto-suspend). These tests cover the reconnect-and-retry path wit
 import psycopg
 import pytest
 
-from agencyos.api.app import _is_dead_connection, _Session
+from api.app import _is_dead_connection, _Session
 
 
 def _make_session() -> _Session:
@@ -68,9 +68,9 @@ async def test_get_session_rehydrates_unknown_id(monkeypatch):
     import sys
     from uuid import uuid4
 
-    # NB: `agencyos.api.__init__` re-exports the FastAPI instance as `app`, shadowing the submodule
+    # NB: `api.__init__` re-exports the FastAPI instance as `app`, shadowing the submodule
     # for attribute access — so fetch the real module from sys.modules to reach its globals.
-    apimod = sys.modules["agencyos.api.app"]
+    apimod = sys.modules["api.app"]
 
     cid = uuid4()
     apimod._SESSIONS.pop(cid, None)

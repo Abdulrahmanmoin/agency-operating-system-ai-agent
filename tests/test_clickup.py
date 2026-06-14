@@ -7,9 +7,9 @@ import pytest
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from agencyos.agents.clickup import ClickUpAgent, ClickUpChange, ClickUpPlan, _is_cancel
-from agencyos.graph.builder import build_graph
-from agencyos.graph.state import AgencyState, ClickUpTicket, ClickUpTicketDraft, Intent, Task
+from agents.clickup import ClickUpAgent, ClickUpChange, ClickUpPlan, _is_cancel
+from graph.builder import build_graph
+from graph.state import AgencyState, ClickUpTicket, ClickUpTicketDraft, Intent, Task
 
 
 # ─── helpers ──────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ def _patch_intent(monkeypatch, intent: Intent) -> None:
         i.agents = list(intent.agents)
         return i
 
-    monkeypatch.setattr("agencyos.agents.manager.ManagerAgent.classify_intent", fake_classify)
+    monkeypatch.setattr("agents.manager.ManagerAgent.classify_intent", fake_classify)
 
 
 def _stub_draft(monkeypatch, drafts: list[ClickUpTicketDraft]) -> None:
@@ -44,7 +44,7 @@ def _stub_draft(monkeypatch, drafts: list[ClickUpTicketDraft]) -> None:
         def with_structured_output(self, _schema, **_kwargs):
             return _Structured()
 
-    monkeypatch.setattr("agencyos.agents.clickup.get_chat_model", lambda *a, **k: _Model())
+    monkeypatch.setattr("agents.clickup.get_chat_model", lambda *a, **k: _Model())
 
 
 def _stub_llm_sequence(monkeypatch, plans: list[ClickUpPlan]) -> None:
@@ -61,7 +61,7 @@ def _stub_llm_sequence(monkeypatch, plans: list[ClickUpPlan]) -> None:
         def with_structured_output(self, _schema, **_kwargs):
             return _Structured()
 
-    monkeypatch.setattr("agencyos.agents.clickup.get_chat_model", lambda *a, **k: _Model())
+    monkeypatch.setattr("agents.clickup.get_chat_model", lambda *a, **k: _Model())
 
 
 def _stub_plan(monkeypatch, plan: ClickUpPlan) -> None:
@@ -75,7 +75,7 @@ def _stub_plan(monkeypatch, plan: ClickUpPlan) -> None:
         def with_structured_output(self, _schema, **_kwargs):
             return _Structured()
 
-    monkeypatch.setattr("agencyos.agents.clickup.get_chat_model", lambda *a, **k: _Model())
+    monkeypatch.setattr("agents.clickup.get_chat_model", lambda *a, **k: _Model())
 
 
 def _stub_by_schema(monkeypatch, by_schema: dict) -> None:
@@ -93,14 +93,14 @@ def _stub_by_schema(monkeypatch, by_schema: dict) -> None:
         def with_structured_output(self, schema, **_kwargs):
             return _Structured(by_schema[schema])
 
-    monkeypatch.setattr("agencyos.agents.clickup.get_chat_model", lambda *a, **k: _Model())
+    monkeypatch.setattr("agents.clickup.get_chat_model", lambda *a, **k: _Model())
 
 
 def _stub_members(monkeypatch, members: list[dict] | None = None) -> None:
     async def fake_members():
         return members or []
 
-    monkeypatch.setattr("agencyos.agents.clickup.list_workspace_members", fake_members)
+    monkeypatch.setattr("agents.clickup.list_workspace_members", fake_members)
 
 
 # ─── unit: helpers + drafting ─────────────────────────────────────────
@@ -132,7 +132,7 @@ async def test_draft_from_tasks(monkeypatch):
 
 
 def test_extract_ticket_parses_json():
-    from agencyos.tools.clickup_mcp import _extract_ticket
+    from tools.clickup_mcp import _extract_ticket
 
     raw = '{"id": "x1", "name": "Real", "url": "https://app.clickup.com/t/x1", "list": {"id": "L9"}}'
     t = _extract_ticket(raw, ClickUpTicketDraft(name="fallback"), "L1")
@@ -142,7 +142,7 @@ def test_extract_ticket_parses_json():
 
 def test_extract_ticket_returns_none_without_a_task():
     """A non-task reply (workspace prompt, license notice, plain text) is NOT a created ticket."""
-    from agencyos.tools.clickup_mcp import _extract_ticket
+    from tools.clickup_mcp import _extract_ticket
 
     draft = ClickUpTicketDraft(name="x")
     assert _extract_ticket("⚠️ Multiple Workspaces Detected ...", draft, "L1") is None
@@ -151,7 +151,7 @@ def test_extract_ticket_returns_none_without_a_task():
 
 
 def test_extract_ticket_from_content_list_ignores_sponsor_text():
-    from agencyos.tools.clickup_mcp import _extract_ticket
+    from tools.clickup_mcp import _extract_ticket
 
     raw = ['{"id": "86z", "name": "T", "url": "https://app.clickup.com/t/86z"}', "♥ Support this project"]
     t = _extract_ticket(raw, ClickUpTicketDraft(name="x"), "L1")
@@ -174,7 +174,7 @@ async def _async(value):
 
 async def test_create_via_mcp_raises_on_non_task_reply(monkeypatch):
     """The fix for the 'says created but nothing exists' bug: no task id → raise, not false success."""
-    from agencyos.tools import clickup_mcp
+    from tools import clickup_mcp
 
     monkeypatch.setattr(
         clickup_mcp, "clickup_tools", _fake_tools_with_create("⚠️ Multiple Workspaces Detected")
@@ -184,7 +184,7 @@ async def test_create_via_mcp_raises_on_non_task_reply(monkeypatch):
 
 
 async def test_create_via_mcp_success(monkeypatch):
-    from agencyos.tools import clickup_mcp
+    from tools import clickup_mcp
 
     payload = ['{"id": "86abc", "name": "x", "url": "https://app.clickup.com/t/86abc", "list": {"id": "L1"}}', "♥ sponsor"]
     monkeypatch.setattr(clickup_mcp, "clickup_tools", _fake_tools_with_create(payload))
@@ -193,7 +193,7 @@ async def test_create_via_mcp_success(monkeypatch):
 
 
 def test_find_create_tool():
-    from agencyos.tools.clickup_mcp import _find_create_tool
+    from tools.clickup_mcp import _find_create_tool
 
     sentinel = object()
     assert _find_create_tool({"create_task": sentinel}) is sentinel
@@ -203,7 +203,7 @@ def test_find_create_tool():
 
 
 async def test_create_tickets_requires_config(monkeypatch):
-    from agencyos.tools import clickup_mcp
+    from tools import clickup_mcp
 
     monkeypatch.setattr(clickup_mcp, "clickup_configured", lambda: False)
     with pytest.raises(RuntimeError, match="isn't configured"):
@@ -211,7 +211,7 @@ async def test_create_tickets_requires_config(monkeypatch):
 
 
 async def test_create_via_mcp_includes_due_date_and_assignees_only_when_set(monkeypatch):
-    from agencyos.tools import clickup_mcp
+    from tools import clickup_mcp
 
     seen = {}
 
@@ -244,8 +244,8 @@ async def test_create_via_mcp_includes_due_date_and_assignees_only_when_set(monk
 async def test_list_workspace_members_parses(monkeypatch):
     import httpx
 
-    from agencyos.config import settings
-    from agencyos.tools import clickup_mcp
+    from config import settings
+    from tools import clickup_mcp
 
     monkeypatch.setattr(settings, "clickup_api_key", "pk_test")
     monkeypatch.setattr(settings, "clickup_team_id", "90182781700")
@@ -287,7 +287,7 @@ async def test_list_workspace_members_parses(monkeypatch):
 
 
 async def test_list_workspace_members_empty_when_unconfigured(monkeypatch):
-    from agencyos.tools import clickup_mcp
+    from tools import clickup_mcp
 
     monkeypatch.setattr(clickup_mcp, "clickup_configured", lambda: False)
     assert await clickup_mcp.list_workspace_members() == []
@@ -315,12 +315,12 @@ async def test_confirm_creates_tickets(monkeypatch):
     _patch_intent(monkeypatch, Intent(agents=["clickup"]))
     _stub_draft(monkeypatch, [ClickUpTicketDraft(name="Call client", description="Fri", priority=2)])
     _stub_members(monkeypatch, [])
-    monkeypatch.setattr("agencyos.agents.clickup.clickup_configured", lambda: True)
+    monkeypatch.setattr("agents.clickup.clickup_configured", lambda: True)
 
     async def fake_create(drafts, list_id=None):  # noqa: ANN001
         return [ClickUpTicket(id="abc", name="Call client", url="https://app.clickup.com/t/abc")]
 
-    monkeypatch.setattr("agencyos.agents.clickup.create_tickets", fake_create)
+    monkeypatch.setattr("agents.clickup.create_tickets", fake_create)
 
     app = _compile()
     state = AgencyState(user_id="u", last_user_message="create a ticket to call the client Friday")
@@ -342,12 +342,12 @@ async def test_cancel_creates_nothing(monkeypatch):
     _patch_intent(monkeypatch, Intent(agents=["clickup"]))
     _stub_draft(monkeypatch, [ClickUpTicketDraft(name="Call client")])
     _stub_members(monkeypatch, [])
-    monkeypatch.setattr("agencyos.agents.clickup.clickup_configured", lambda: True)
+    monkeypatch.setattr("agents.clickup.clickup_configured", lambda: True)
 
     async def boom(drafts, list_id=None):  # noqa: ANN001
         raise AssertionError("must not create tickets when the user declines")
 
-    monkeypatch.setattr("agencyos.agents.clickup.create_tickets", boom)
+    monkeypatch.setattr("agents.clickup.create_tickets", boom)
 
     app = _compile()
     state = AgencyState(user_id="u", last_user_message="make a clickup ticket")
@@ -375,7 +375,7 @@ async def test_detail_answer_enriches_create_args(monkeypatch):
         ],
     )
     _stub_members(monkeypatch, [{"id": "111", "username": "Abdul", "email": "a@b.com"}])
-    monkeypatch.setattr("agencyos.agents.clickup.clickup_configured", lambda: True)
+    monkeypatch.setattr("agents.clickup.clickup_configured", lambda: True)
 
     captured = {}
 
@@ -383,7 +383,7 @@ async def test_detail_answer_enriches_create_args(monkeypatch):
         captured["drafts"] = list(drafts)
         return [ClickUpTicket(id="z1", name=drafts[0].name, url="https://app.clickup.com/t/z1")]
 
-    monkeypatch.setattr("agencyos.agents.clickup.create_tickets", fake_create)
+    monkeypatch.setattr("agents.clickup.create_tickets", fake_create)
 
     app = _compile()
     state = AgencyState(user_id="u", last_user_message="create a ticket to call the client")
@@ -404,7 +404,7 @@ async def test_skip_questions_creates_without_interrupt(monkeypatch):
         ClickUpPlan(tickets=[ClickUpTicketDraft(name="Call client")], skip_questions=True),
     )
     _stub_members(monkeypatch, [])
-    monkeypatch.setattr("agencyos.agents.clickup.clickup_configured", lambda: True)
+    monkeypatch.setattr("agents.clickup.clickup_configured", lambda: True)
 
     created = {}
 
@@ -412,7 +412,7 @@ async def test_skip_questions_creates_without_interrupt(monkeypatch):
         created["n"] = len(drafts)
         return [ClickUpTicket(id="z", name="Call client", url="https://app.clickup.com/t/z")]
 
-    monkeypatch.setattr("agencyos.agents.clickup.create_tickets", fake_create)
+    monkeypatch.setattr("agents.clickup.create_tickets", fake_create)
 
     app = _compile()
     state = AgencyState(user_id="u", last_user_message="create a ticket to call client, no details needed")
@@ -436,12 +436,12 @@ async def test_needs_title_asks_for_title_then_creates(monkeypatch):
         ],
     )
     _stub_members(monkeypatch, [])
-    monkeypatch.setattr("agencyos.agents.clickup.clickup_configured", lambda: True)
+    monkeypatch.setattr("agents.clickup.clickup_configured", lambda: True)
 
     async def fake_create(drafts, list_id=None):  # noqa: ANN001
         return [ClickUpTicket(id="t1", name=drafts[0].name, url="https://app.clickup.com/t/t1")]
 
-    monkeypatch.setattr("agencyos.agents.clickup.create_tickets", fake_create)
+    monkeypatch.setattr("agents.clickup.create_tickets", fake_create)
 
     app = _compile()
     state = AgencyState(user_id="u", last_user_message="create a ticket but no due date priority and assignee")
@@ -467,7 +467,7 @@ async def test_update_intent_updates_most_recent_ticket(monkeypatch):
         },
     )
     _stub_members(monkeypatch, [{"id": "111", "username": "Abdul", "email": "a@b.com"}])
-    monkeypatch.setattr("agencyos.agents.clickup.clickup_configured", lambda: True)
+    monkeypatch.setattr("agents.clickup.clickup_configured", lambda: True)
 
     captured = {}
 
@@ -475,7 +475,7 @@ async def test_update_intent_updates_most_recent_ticket(monkeypatch):
         captured.update(task_id=task_id, due_date=due_date, assignees=assignees)
         return ClickUpTicket(id=task_id, name=name, url=f"https://app.clickup.com/t/{task_id}")
 
-    monkeypatch.setattr("agencyos.agents.clickup.update_ticket", fake_update)
+    monkeypatch.setattr("agents.clickup.update_ticket", fake_update)
 
     app = _compile()
     state = AgencyState(
@@ -514,7 +514,7 @@ async def test_update_ambiguous_asks_which(monkeypatch):
         },
     )
     _stub_members(monkeypatch, [])
-    monkeypatch.setattr("agencyos.agents.clickup.clickup_configured", lambda: True)
+    monkeypatch.setattr("agents.clickup.clickup_configured", lambda: True)
 
     captured = {}
 
@@ -522,7 +522,7 @@ async def test_update_ambiguous_asks_which(monkeypatch):
         captured["task_id"] = task_id
         return ClickUpTicket(id=task_id, name=name)
 
-    monkeypatch.setattr("agencyos.agents.clickup.update_ticket", fake_update)
+    monkeypatch.setattr("agents.clickup.update_ticket", fake_update)
 
     app = _compile()
     state = AgencyState(
@@ -560,7 +560,7 @@ async def test_clickup_not_refused_without_material(monkeypatch):
 async def test_unconfigured_clickup_explains_instead_of_creating(monkeypatch):
     _patch_intent(monkeypatch, Intent(agents=["clickup"]))
     _stub_draft(monkeypatch, [ClickUpTicketDraft(name="Ticket A")])
-    monkeypatch.setattr("agencyos.agents.clickup.clickup_configured", lambda: False)
+    monkeypatch.setattr("agents.clickup.clickup_configured", lambda: False)
 
     app = _compile()
     state = AgencyState(user_id="u", last_user_message="create a ticket")
