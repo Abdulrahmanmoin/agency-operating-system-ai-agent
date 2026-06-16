@@ -73,6 +73,51 @@ async def list_workspace_members() -> list[dict[str, Any]]:
     return members
 
 
+async def list_tasks() -> list[dict[str, Any]]:
+    """Return the configured List's tasks as ``[{id, name, assignees, status}]`` (read-only).
+
+    Used by the Progress Report agent to know which tickets exist and who they're assigned to (the
+    GitHub side supplies their completion). Like ``list_workspace_members`` this is a direct
+    read-only REST call (``GET /api/v2/list/{list_id}/task``) — the pinned MCP server has no reliable
+    list-tasks tool — and degrades to ``[]`` when unconfigured or on any error.
+    """
+    if not clickup_configured() or not settings.clickup_list_id:
+        return []
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"https://api.clickup.com/api/v2/list/{settings.clickup_list_id}/task",
+                headers={"Authorization": settings.clickup_api_key or ""},
+                params={"include_closed": "true"},
+            )
+            resp.raise_for_status()
+            raw_tasks = resp.json().get("tasks", [])
+    except Exception:  # noqa: BLE001 — progress reporting is best-effort
+        return []
+
+    tasks: list[dict[str, Any]] = []
+    for t in raw_tasks:
+        if not isinstance(t, dict):
+            continue
+        assignees = [
+            a.get("username") or a.get("email") or str(a.get("id"))
+            for a in (t.get("assignees") or [])
+            if isinstance(a, dict)
+        ]
+        status = (t.get("status") or {}).get("status") if isinstance(t.get("status"), dict) else None
+        tasks.append(
+            {
+                "id": str(t.get("id", "")),
+                "name": t.get("name", ""),
+                "assignees": assignees,
+                "status": status,
+            }
+        )
+    return tasks
+
+
 def _server_params() -> Any:
     from mcp import StdioServerParameters
 

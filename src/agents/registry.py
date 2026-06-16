@@ -11,6 +11,7 @@ from agents import (
     clarification,
     clickup,
     planning,
+    progress_report,
     proposal,
     requirement,
     risk,
@@ -36,6 +37,7 @@ _CAPABILITY_AGENTS: list[BaseAgent] = [
     proposal.run,
     validator.run,
     clickup.run,
+    progress_report.run,
 ]
 
 # name -> agent instance, for dispatch lookups elsewhere.

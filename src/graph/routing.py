@@ -24,11 +24,14 @@ DEPENDENCIES: dict[str, list[str]] = {
     # ClickUp ticket creation has no agent-output prerequisite: it works from a free-form request,
     # and opportunistically from the generated tasks if they already exist.
     "clickup": [],
+    # The progress report reads live ClickUp + GitHub state; it needs no agent output upstream.
+    "progress_report": [],
 }
 
 # Agents that can act WITHOUT any meeting material (so the source-material gate must not refuse
-# them). ClickUp can create a ticket from a plain free-form instruction.
-MATERIAL_FREE_AGENTS: frozenset[str] = frozenset({"clickup"})
+# them). ClickUp can create a ticket from a plain free-form instruction; the progress report works
+# entirely from live ClickUp/GitHub state.
+MATERIAL_FREE_AGENTS: frozenset[str] = frozenset({"clickup", "progress_report"})
 
 # Canonical order for a full end-to-end run ("do everything" intent).
 FULL_PIPELINE: list[str] = [
@@ -92,6 +95,8 @@ def reset_agent_output(state: AgencyState, agent: str) -> None:
         case "validator":
             state.validation_report = None
             state.attempt_count.pop("validation", None)
+        case "progress_report":
+            state.progress_report = None
 
 
 def missing_prerequisites(state: AgencyState, agent: str) -> list[str]:

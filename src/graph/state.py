@@ -221,6 +221,7 @@ class AgencyState(BaseModel):
     proposal: Proposal | None = None
     validation_report: ValidationReport | None = None
     clickup_tickets: list[ClickUpTicket] = Field(default_factory=list)
+    progress_report: str | None = None  # rendered PM progress report (ClickUp ↔ GitHub), markdown
 
     # Conversation control (intent-driven, turn-based)
     last_user_message: str | None = None

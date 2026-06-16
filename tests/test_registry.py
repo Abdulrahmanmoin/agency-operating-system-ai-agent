@@ -16,6 +16,7 @@ def test_registry_excludes_manager_includes_specialists():
         "proposal",
         "validator",
         "clickup",
+        "progress_report",
     } == names
 
 

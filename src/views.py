@@ -72,6 +72,11 @@ def _clarifications_md(state: AgencyState) -> str:
     return "\n".join(lines)
 
 
+def _progress_md(state: AgencyState) -> str:
+    # The agent already rendered the full PM report to markdown; show it verbatim.
+    return state.progress_report or ""
+
+
 def _validator_md(state: AgencyState) -> str:
     v = state.validation_report
     verdict = "approved ✅" if v.approved else "needs revision ❌"
@@ -87,6 +92,7 @@ _RENDERERS = {
     "proposal": (_proposal_md, lambda s: s.proposal is not None),
     "clarification": (_clarifications_md, lambda s: True),
     "validator": (_validator_md, lambda s: s.validation_report is not None),
+    "progress_report": (_progress_md, lambda s: s.progress_report is not None),
 }
 # NOTE: ClickUp tickets are intentionally NOT a Deliverables card — they live in ClickUp (and aren't
 # meaningful as a DOCX/PDF download). The "✅ Created N tickets" chat message is the confirmation.

@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # External integrations
     tavily_api_key: str | None = None
 
+    # GitHub (read-only progress reporting). The Progress Report agent matches ClickUp tickets to
+    # the repo's branches/PRs by the ticket id embedded in the branch name (e.g. CU-<id>), so it can
+    # tell the PM how much is done per developer and overall. Read-only — no writes to GitHub.
+    github_token: str | None = None
+    github_repo: str | None = None  # "owner/name"
+
     # ClickUp (ticket creation via MCP). Tickets are created inside a List, so a default
     # list id is needed for bulk pushes; the team/workspace id is required by the MCP server.
     clickup_api_key: str | None = None

@@ -50,6 +50,7 @@ _ARTIFACT_TITLES = {
     "risk": "Risk Analysis",
     "proposal": "Proposal",
     "validator": "Quality Review",
+    "progress_report": "Progress Report",
 }
 
 _log = logging.getLogger("api")
