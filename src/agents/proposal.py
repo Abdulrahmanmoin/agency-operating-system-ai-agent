@@ -44,8 +44,9 @@ class ProposalAgent(BaseAgent):
             f"You are the {self.role}. {self.responsibility} Goal: {self.goal} "
             "Write in a confident, client-ready voice. Ground everything in the inputs; do not "
             "invent figures. Frame risks as constructive considerations, never as alarm. "
-            "Each section (scope, timeline, pricing, next_steps) must be a single prose string "
-            "(markdown allowed), never a nested object or list."
+            "Each section (executive_summary, approach, scope, deliverables, timeline, pricing, "
+            "assumptions, next_steps) must be a single prose string (markdown bullets allowed), "
+            "never a nested object or list."
         )
         user = prompts.render(
             "tasks/draft_proposal.j2",

@@ -2,7 +2,7 @@
 
 > Multi-agent AI system that turns client meeting recordings or notes into a validated, packaged project proposal — autonomously, with full reasoning traceability.
 
-Built with **Python · LangChain · LangGraph · Groq · Neon Postgres** — CLI-first.
+Built with **Python · LangChain · LangGraph · Groq · Neon Postgres**, served through a **FastAPI** backend and a **Next.js** chat UI.
 
 See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the canonical specification.
 
@@ -21,10 +21,11 @@ cp .env.example .env
 # 3. Apply DB migrations
 uv run alembic upgrade head
 
-# 4. Run a project
-uv run agencyos run --audio path/to/meeting.mp3 --user you --client acme
-# or
-uv run agencyos run --notes path/to/notes.txt --user you --client acme
+# 4. Start the API (http://127.0.0.1:8000)
+uv run python scripts/serve_api.py
+
+# 5. In another terminal, start the chat UI (http://localhost:3000)
+cd ../my-app && npm install && npm run dev
 ```
 
 ## What it does
@@ -52,7 +53,7 @@ Every agent emits a **reasoning trace** before acting (THINK → ACT → WRITE),
 log. State persists across turns in **Neon Postgres** via the LangGraph checkpointer — pause, resume,
 and replay any conversation. The chat thread *is* the memory — ChatGPT-style, no separate vector DB.
 
-Try it: `uv run agencyos chat --user you --notes meeting.txt`
+Try it: open the chat UI, attach `meeting.txt`, and ask *"extract the requirements"* or *"handle this end to end"*.
 
 ## Why multi-agent
 
@@ -85,7 +86,7 @@ Until those are set, the agent says ClickUp isn't connected instead of failing.
 
 ## Project status
 
-**Working end to end** (offline-tested, **87 tests passing**): real agent `act()` bodies (Groq
+**Working end to end** (offline-tested, **106 tests passing**): real agent `act()` bodies (Groq
 structured output, Whisper transcription, Tavily search), intent classification, ask-first
 prerequisite resolution, dynamic dispatch, clarification + ClickUp HITL, the validator self-correction
 loop, a Next.js web UI + FastAPI layer (chat, Deliverables panel, file upload, DOCX/PDF download),
@@ -93,4 +94,5 @@ and ClickUp ticket creation via MCP — all on LangGraph interrupts + the Postgr
 UI-agnostic `orchestrator.drive_turn`.
 
 To run against live services, set `GROQ_API_KEY` + Neon `DATABASE_URL` (and optionally `TAVILY_API_KEY`
-/ ClickUp keys) in `.env`, then `uv run agencyos chat`.
+/ ClickUp keys) in `.env`, then start the API (`uv run python scripts/serve_api.py`) and the UI
+(`cd ../my-app && npm run dev`).

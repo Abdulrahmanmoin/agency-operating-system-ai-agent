@@ -62,11 +62,17 @@ class Milestone(_Payload):
     description: str
     target_date: str | None = None
     deliverables: list[str] | None = None
+    owner: str | None = None  # the role/team accountable for this phase
+    duration: str | None = None  # rough length or effort (e.g. "2 weeks")
+    dependencies: list[str] | None = None  # earlier milestones/inputs this phase needs first
 
 
 class Plan(_Payload):
     summary: str
+    objectives: list[str] | None = None  # strategic objectives the roadmap serves
+    execution_strategy: str = ""  # how delivery will be approached, in prose
     phases: list[Milestone] | None = None
+    success_metrics: list[str] | None = None  # measurable signals the project is on track/done
 
 
 class Task(_Payload):
@@ -130,6 +136,9 @@ class Proposal(BaseModel):
     timeline: str
     pricing: str
     next_steps: str
+    approach: str = ""  # our methodology / how we'll deliver
+    deliverables: str = ""  # concrete client-facing outputs they receive
+    assumptions: str = ""  # key considerations & assumptions (risks framed constructively)
 
 
 class ValidationReport(BaseModel):

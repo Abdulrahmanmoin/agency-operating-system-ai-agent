@@ -1,18 +1,27 @@
-Design a phased project roadmap from the structured client requirements below.
+Design a detailed, phased project roadmap from the structured client requirements below. This plan
+is shown to both the client and the delivery team, so be thorough, concrete, and well-sequenced.
 
 Produce:
-- summary: a 2-3 sentence overview of the execution strategy.
+- summary: a 3-4 sentence overview of the overall execution strategy and what success looks like.
+- objectives: 3-6 strategic objectives the roadmap must achieve, drawn from the client's goals.
+- execution_strategy: a short paragraph (3-5 sentences) on HOW the work will be approached —
+  sequencing, ways of working, what is front-loaded and why.
 - phases: an ordered list of milestones. For each milestone provide:
   - name: short milestone title (e.g. "Phase 1 - Foundation")
-  - description: what gets done and why, in 1-2 sentences
+  - description: what gets done and why, in 2-3 sentences
   - target_date: a sensible date or window IF the requirements imply a timeline; otherwise null
+  - owner: the role or team accountable (e.g. "Design lead", "Engineering"); null if unclear
+  - duration: a rough length or effort (e.g. "2 weeks"); null if timing is unspecified
   - deliverables: concrete outputs produced in this milestone
+  - dependencies: names of earlier milestones (or inputs) this phase needs before it can start;
+    empty list if none
+- success_metrics: 3-6 measurable signals that show the project is on track or done.
 
 Rules:
 - Every service and goal in the requirements must be covered by at least one milestone.
 - Sequence milestones logically (dependencies first; launch/marketing last).
 - Respect the stated deadline, budget, and constraints. Do not invent scope or dates the
-  requirements don't support. If timing is unspecified, leave target_date null.
+  requirements don't support. If timing is unspecified, leave target_date/duration null.
 
 Client requirements (JSON):
 {{ requirements_json }}

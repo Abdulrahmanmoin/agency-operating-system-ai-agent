@@ -77,7 +77,7 @@ def test_render_report_rollup_and_finished_callout():
     md = render_report(items)
     assert "50% complete" in md  # 2 of 4 done
     assert "2/4 tickets done" in md and "2 remaining" in md
-    assert "**Abdul**" in md and "✅ all 2 ticket(s) done" in md
+    assert "**Abdul**" in md and "[DONE] all 2 ticket(s) done" in md
     assert "**Sara**" in md and "0/2 done (1 in progress, 1 not started)" in md
     # the "dev1 finished before dev2" callout the PM cares about
     assert "Abdul finished all assigned tickets" in md

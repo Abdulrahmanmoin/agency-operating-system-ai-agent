@@ -26,12 +26,34 @@ def _requirements_md(state: AgencyState) -> str:
 
 def _plan_md(state: AgencyState) -> str:
     p = state.plan
-    lines = ["**Plan**", p.summary, ""]
-    for m in p.phases:
-        date = f" ({m.target_date})" if m.target_date else ""
-        lines.append(f"- **{m.name}**{date}: {m.description}")
+    lines = ["**Project plan**", p.summary, ""]
+
+    if p.objectives:
+        lines.append("**Objectives**")
+        lines += [f"- {o}" for o in p.objectives]
+        lines.append("")
+
+    if p.execution_strategy:
+        lines += ["**Execution strategy**", p.execution_strategy, ""]
+
+    lines.append("**Roadmap**")
+    for m in p.phases or []:
+        meta = " · ".join(
+            x
+            for x in [m.target_date, f"owner: {m.owner}" if m.owner else None, m.duration]
+            if x
+        )
+        meta = f" ({meta})" if meta else ""
+        lines.append(f"- **{m.name}**{meta}: {m.description}")
         if m.deliverables:
             lines.append("    - Deliverables: " + ", ".join(m.deliverables))
+        if m.dependencies:
+            lines.append("    - Depends on: " + ", ".join(m.dependencies))
+
+    if p.success_metrics:
+        lines += ["", "**Success metrics**"]
+        lines += [f"- {s}" for s in p.success_metrics]
+
     return "\n".join(lines)
 
 
@@ -52,14 +74,22 @@ def _risks_md(state: AgencyState) -> str:
 
 def _proposal_md(state: AgencyState) -> str:
     p = state.proposal
-    return (
-        "**Proposal**\n"
-        f"*Executive summary.* {p.executive_summary}\n\n"
-        f"*Scope.* {p.scope}\n\n"
-        f"*Timeline.* {p.timeline}\n\n"
-        f"*Pricing.* {p.pricing}\n\n"
-        f"*Next steps.* {p.next_steps}"
-    )
+    sections: list[str] = ["**Proposal**", ""]
+
+    def add(title: str, body: str) -> None:
+        if body and body.strip():
+            sections.extend([f"**{title}**", body.strip(), ""])
+
+    add("Executive summary", p.executive_summary)
+    add("Our approach", p.approach)
+    add("Scope of work", p.scope)
+    add("Deliverables", p.deliverables)
+    add("Timeline", p.timeline)
+    add("Investment", p.pricing)
+    add("Key considerations & assumptions", p.assumptions)
+    add("Next steps", p.next_steps)
+
+    return "\n".join(sections).rstrip()
 
 
 def _clarifications_md(state: AgencyState) -> str:

@@ -99,6 +99,9 @@ class TicketProgress:
     status: str  # "done" | "in_progress" | "not_started"
     branch: str | None = None
     pr_url: str | None = None
+    clickup_status: str | None = None  # the ticket's own status text in ClickUp (e.g. "in progress")
+    pr_state: str | None = None  # "merged" | "open" | "closed" | None (no PR)
+    has_branch: bool = False  # a branch referencing this ticket has been pushed
 
 
 def _branch_refs_ticket(branch_name: str, ticket_id: str) -> bool:
@@ -136,13 +139,21 @@ def match_tickets(
         ticket_branches = [b for b in branch_names if _branch_refs_ticket(b, tid)]
 
         if merged:
-            status, branch, pr_url = "done", merged[0].get("head_ref"), merged[0].get("url")
+            status, branch, pr_url, pr_state = (
+                "done", merged[0].get("head_ref"), merged[0].get("url"), "merged"
+            )
         elif open_prs:
-            status, branch, pr_url = "in_progress", open_prs[0].get("head_ref"), open_prs[0].get("url")
+            status, branch, pr_url, pr_state = (
+                "in_progress", open_prs[0].get("head_ref"), open_prs[0].get("url"), "open"
+            )
         elif ticket_branches:
-            status, branch, pr_url = "in_progress", ticket_branches[0], None
+            status, branch, pr_url, pr_state = "in_progress", ticket_branches[0], None, None
+        elif ticket_pulls:  # a PR exists but was closed without merging
+            status, branch, pr_url, pr_state = (
+                "not_started", ticket_pulls[0].get("head_ref"), ticket_pulls[0].get("url"), "closed"
+            )
         else:
-            status, branch, pr_url = "not_started", None, None
+            status, branch, pr_url, pr_state = "not_started", None, None, None
 
         assignees = tk.get("assignees") or []
         assignee = assignees[0] if assignees else "Unassigned"
@@ -154,38 +165,89 @@ def match_tickets(
                 status=status,
                 branch=branch,
                 pr_url=pr_url,
+                clickup_status=tk.get("status"),
+                pr_state=pr_state,
+                has_branch=bool(ticket_branches),
             )
         )
     return result
 
 
-_STATUS_EMOJI = {"done": "✅", "in_progress": "🔄", "not_started": "⬜"}
+# Plain-text tags (not emoji) so the report renders identically in chat, DOCX and PDF — emoji
+# collapse to a "tofu" box in the document fonts and can't be told apart.
+_STATUS_LABEL = {"done": "[DONE]", "in_progress": "[IN PROGRESS]", "not_started": "[NOT STARTED]"}
+_STATUS_ORDER = {"done": 0, "in_progress": 1, "not_started": 2}
 
 
-def _ticket_note(it: TicketProgress) -> str:
-    if it.pr_url:
-        return f" — [PR]({it.pr_url})"
-    if it.branch:
-        return f" — branch `{it.branch}`"
-    return ""
+def _clickup_phrase(it: TicketProgress) -> str:
+    """The ticket's own status as it stands in ClickUp."""
+    return f"*{it.clickup_status}*" if it.clickup_status else "*no status set*"
+
+
+def _github_phrase(it: TicketProgress) -> str:
+    """Plain-English GitHub state for one ticket: code pushed? PR opened? merged?"""
+    if it.pr_state == "merged" or (it.status == "done" and it.pr_url):
+        link = f" ([PR]({it.pr_url}))" if it.pr_url else ""
+        return f"PR merged into `main`{link}"
+    if it.pr_state == "open":
+        link = f" ([PR]({it.pr_url}))" if it.pr_url else ""
+        return f"PR open — **waiting on merge**{link}"
+    if it.pr_state == "closed":
+        link = f" ([PR]({it.pr_url}))" if it.pr_url else ""
+        return f"PR closed without merging{link}"
+    if it.has_branch or it.branch:
+        return f"code pushed to branch `{it.branch}`, no PR opened yet"
+    return "no branch or PR yet"
 
 
 def render_report(items: list[TicketProgress]) -> str:
-    """Render the matched tickets into a PM-facing markdown progress report (deterministic)."""
+    """Render the matched tickets into a PM-facing markdown progress report (deterministic).
+
+    The report is intentionally detailed for delivery reviews: an overall roll-up, a status
+    summary, a "waiting on merge" spotlight, a per-developer breakdown that states each ticket's
+    ClickUp status *and* its GitHub state (code pushed / PR open / merged), the finished-vs-behind
+    callout, recommended next actions, and a legend. Output is plain markdown (bold headings,
+    bullets, indented sub-bullets) so the DOCX/PDF exporters render it directly.
+    """
     total = len(items)
     if total == 0:
         return "**Project progress** — no ClickUp tickets found to report on yet."
 
     done = sum(1 for i in items if i.status == "done")
+    in_prog = sum(1 for i in items if i.status == "in_progress")
+    not_started = sum(1 for i in items if i.status == "not_started")
     pct = round(100 * done / total)
     remaining = total - done
+
+    merged_prs = [i for i in items if i.pr_state == "merged"]
+    open_prs = [i for i in items if i.pr_state == "open"]
+    branch_only = [i for i in items if i.has_branch and not i.pr_state]
 
     lines = [
         f"**Project progress — {pct}% complete** "
         f"({done}/{total} tickets done · {remaining} remaining)",
         "",
-        "**By developer**",
+        "This report joins every ClickUp ticket to the GitHub branch and pull request that delivers "
+        "it. A ticket is counted **done** only once its PR is merged into `main`; until then it is "
+        "in progress (code pushed, or a PR open and awaiting review) or not started.",
+        "",
+        "**Status summary**",
+        f"- Done — PR merged into `main`: **{done}**",
+        f"- In progress: **{in_prog}** "
+        f"({len(branch_only)} with code pushed but no PR yet, {len(open_prs)} with a PR open)",
+        f"- Not started — no branch or PR yet: **{not_started}**",
+        f"- Pull requests: **{len(merged_prs)} merged**, **{len(open_prs)} open**, "
+        f"{len(branch_only)} branch(es) pushed without a PR",
     ]
+
+    # Spotlight what the PM can unblock right now.
+    if open_prs:
+        lines += ["", "**Waiting on merge** (open PRs ready for review)"]
+        for it in open_prs:
+            link = f" — [PR]({it.pr_url})" if it.pr_url else ""
+            lines.append(f"- {it.name} — {it.assignee}{link}")
+
+    lines += ["", "**By developer**"]
 
     by_dev: dict[str, list[TicketProgress]] = {}
     for it in items:
@@ -199,12 +261,15 @@ def render_report(items: list[TicketProgress]) -> str:
         ns = sum(1 for i in dev_items if i.status == "not_started")
         t = len(dev_items)
         if d == t:
-            lines.append(f"- **{dev}** — ✅ all {t} ticket(s) done")
+            lines.append(f"- **{dev}** — [DONE] all {t} ticket(s) done")
             finished_devs.append(dev)
         else:
             lines.append(f"- **{dev}** — {d}/{t} done ({ip} in progress, {ns} not started)")
-        for it in dev_items:
-            lines.append(f"    - {_STATUS_EMOJI[it.status]} {it.name}{_ticket_note(it)}")
+        for it in sorted(dev_items, key=lambda x: (_STATUS_ORDER[x.status], x.name)):
+            lines.append(
+                f"    - {_STATUS_LABEL[it.status]} {it.name} — "
+                f"ClickUp: {_clickup_phrase(it)} · GitHub: {_github_phrase(it)}"
+            )
 
     # The "dev1 finished before dev2" callout the PM cares about.
     if finished_devs and len(finished_devs) < len(by_dev):
@@ -214,5 +279,30 @@ def render_report(items: list[TicketProgress]) -> str:
             f"**Heads up:** {', '.join(finished_devs)} finished all assigned tickets; "
             f"{', '.join(behind)} still {'has' if len(behind) == 1 else 'have'} open work.",
         ]
+
+    # Concrete next actions, derived straight from the data.
+    actions: list[str] = []
+    for it in open_prs:
+        actions.append(
+            f"Review and merge the PR for **{it.name}** ({it.assignee}) to close it out."
+        )
+    for it in branch_only:
+        actions.append(
+            f"Ask {it.assignee} to open a PR for **{it.name}** — code is pushed but unreviewed."
+        )
+    if not actions:
+        actions.append(
+            "No PRs are awaiting action right now; the next work is in the not-started tickets above."
+        )
+    lines += ["", "**Recommended next actions**"]
+    lines += [f"- {a}" for a in actions]
+
+    lines += [
+        "",
+        "**How to read this**",
+        "- **[DONE]** — the ticket's pull request is merged into `main`.",
+        "- **[IN PROGRESS]** — a branch is pushed, or a PR is open but not yet merged.",
+        "- **[NOT STARTED]** — no branch or PR references this ticket yet.",
+    ]
 
     return "\n".join(lines)
